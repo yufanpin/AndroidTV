@@ -4,6 +4,15 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example 1.4.5"
+        required: true
+        default: "1.4.5"
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -19,6 +28,9 @@ jobs:
           distribution: "zulu"
           java-version: "17"
 
+      - name: 设置Gradle缓存
+        uses: gradle/actions/setup-gradle@v4
+
       - name: 解码生成 jks
         run: echo $KEYSTORE_BASE64 | base64 -di > app/keystore.jks
         env:
@@ -30,31 +42,33 @@ jobs:
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD}}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       - name: 获取版本号
         id: version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >>$GITHUB_OUTPUT
-
-      - name: 重命名应用
         run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >>$GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.inputs.version }}" >>$GITHUB_OUTPUT
+          fi
+
+      - name: 准备产物
+        run: |
+          mkdir -p artifacts
           for file in app/build/outputs/apk/release/app-*.apk; do
-            if [[ $file =~ app-(.?*)release.apk ]]; then
-              new_file_name="app/build/outputs/apk/release/mytv-android-${BASH_REMATCH[1]}${{ steps.version.outputs.version }}.apk"
-              mv "$file" "$new_file_name"
+            if [[ "$file" == *"unaligned"* ]]; then
+              continue
             fi
+            cp "$file" "artifacts/mytv-android-${{ steps.version.outputs.version }}.apk"
           done
-
-      - name: Prepare artifacts
-        run: |
-          mkdir artifacts
-          cp app/build/outputs/apk/release/*.apk artifacts/
 
       - name: Upload Release
         uses: ncipollo/release-action@v1
         with:
+          tag: v${{ steps.version.outputs.version }}
           name: v${{ steps.version.outputs.version }}
-          token: ${{ secrets.GIT_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           omitBodyDuringUpdate: true
           omitNameDuringUpdate: true
           omitPrereleaseDuringUpdate: true
