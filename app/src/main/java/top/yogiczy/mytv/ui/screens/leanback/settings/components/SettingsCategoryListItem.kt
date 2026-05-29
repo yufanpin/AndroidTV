@@ -90,12 +90,14 @@ fun LeanbackSettingsCategoryListItem(
             ),
     )
 
-    LeanbackQrcodeDialog(
-        text = HttpServer.serverUrl,
-        description = "扫码前往设置页面",
-        showDialogProvider = { showServerUrlDialog },
-        onDismissRequest = { showServerUrlDialog = false },
-    )
+    if (showServerUrlDialog) {
+        LeanbackQrcodeDialog(
+            text = HttpServer.serverUrl,
+            description = "扫码前往设置页面",
+            showDialogProvider = { showServerUrlDialog },
+            onDismissRequest = { showServerUrlDialog = false },
+        )
+    }
 }
 
 @Composable

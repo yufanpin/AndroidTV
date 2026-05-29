@@ -99,6 +99,7 @@ fun Modifier.handleLeanbackDragGestures(
 
 fun Modifier.handleLeanbackKeyEvents(
     key: Any = Unit,
+    enableTouchGestures: Boolean = false,
     onLeft: () -> Unit = {},
     onLongLeft: () -> Unit = {},
     onRight: () -> Unit = {},
@@ -179,22 +180,36 @@ fun Modifier.handleLeanbackKeyEvents(
         KeyEvent.KEYCODE_NUMPAD_ENTER to onLongSelect,
         KeyEvent.KEYCODE_DPAD_CENTER to onLongSelect,
     ),
-).pointerInput(key) {
-    detectTapGestures(
-        onTap = { onSelect() },
-        onLongPress = { onLongSelect() },
-        onDoubleTap = { onSettings() },
-    )
-}
-
-fun Modifier.handleLeanbackUserAction(onHandle: () -> Unit) =
-    onPreviewKeyEvent { onHandle(); false }
-        .pointerInput(Unit) { detectDragGestures { _, _ -> onHandle() } }
-        .pointerInput(Unit) {
+).let {
+    if (!enableTouchGestures) {
+        it
+    } else {
+        it.pointerInput(key) {
             detectTapGestures(
-                onTap = { onHandle() },
-                onDoubleTap = { onHandle() },
-                onLongPress = { onHandle() },
-                onPress = { onHandle() },
+                onTap = { onSelect() },
+                onLongPress = { onLongSelect() },
+                onDoubleTap = { onSettings() },
             )
         }
+    }
+}
+
+fun Modifier.handleLeanbackUserAction(
+    enableTouchGestures: Boolean = false,
+    onHandle: () -> Unit,
+) = onPreviewKeyEvent { onHandle(); false }
+    .let {
+        if (!enableTouchGestures) {
+            it
+        } else {
+            it.pointerInput(Unit) { detectDragGestures { _, _ -> onHandle() } }
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { onHandle() },
+                        onDoubleTap = { onHandle() },
+                        onLongPress = { onHandle() },
+                        onPress = { onHandle() },
+                    )
+                }
+        }
+    }

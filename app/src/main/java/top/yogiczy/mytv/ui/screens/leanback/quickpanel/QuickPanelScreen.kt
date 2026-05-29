@@ -1,7 +1,6 @@
 package top.yogiczy.mytv.ui.screens.leanback.quickpanel
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -73,8 +71,7 @@ fun LeanbackQuickPanelScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .focusRequester(focusRequester)
-            .handleLeanbackUserAction { autoCloseState.active() }
-            .pointerInput(Unit) { detectTapGestures(onTap = { onClose() }) },
+            .handleLeanbackUserAction(enableTouchGestures = false) { autoCloseState.active() },
     ) {
         LeanbackPanelScreenTopRight(
             channelNoProvider = currentIptvChannelNoProvider

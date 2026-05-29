@@ -3,6 +3,7 @@ package top.yogiczy.mytv.ui.screens.leanback.main
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,6 +42,7 @@ import top.yogiczy.mytv.ui.screens.leanback.settings.LeanbackSettingsScreen
 import top.yogiczy.mytv.ui.theme.LeanbackTheme
 import top.yogiczy.mytv.ui.utils.HttpServer
 import top.yogiczy.mytv.ui.utils.handleLeanbackKeyEvents
+import kotlinx.coroutines.delay
 
 @Composable
 fun LeanbackMainScreen(
@@ -71,15 +73,24 @@ fun LeanbackMainScreen(
 @Composable
 private fun LeanbackMainScreenLoading(messageProvider: () -> String?) {
     val childPadding = rememberLeanbackChildPadding()
+    var loadingDotCount by remember { mutableStateOf(1) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(500)
+            loadingDotCount = (loadingDotCount % 3) + 1
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = childPadding.start, bottom = childPadding.bottom),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = "加载中...",
+                text = "加载中" + ".".repeat(loadingDotCount),
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onBackground,
             )

@@ -45,7 +45,6 @@ import top.yogiczy.mytv.ui.screens.leanback.update.LeanbackUpdateScreen
 import top.yogiczy.mytv.ui.screens.leanback.video.LeanbackVideoScreen
 import top.yogiczy.mytv.ui.screens.leanback.video.rememberLeanbackVideoPlayerState
 import top.yogiczy.mytv.ui.utils.SP
-import top.yogiczy.mytv.ui.utils.handleLeanbackDragGestures
 import top.yogiczy.mytv.ui.utils.handleLeanbackKeyEvents
 
 @Composable
@@ -150,32 +149,6 @@ fun LeanbackMainContent(
                         }
                     },
                     onLongDown = { mainContentState.isQuickPanelVisible = true },
-                )
-                .handleLeanbackDragGestures(
-                    onSwipeDown = {
-                        if (settingsViewModel.iptvChannelChangeFlip) mainContentState.changeCurrentIptvToNext()
-                        else mainContentState.changeCurrentIptvToPrev()
-                    },
-                    onSwipeUp = {
-                        if (settingsViewModel.iptvChannelChangeFlip) mainContentState.changeCurrentIptvToPrev()
-                        else mainContentState.changeCurrentIptvToNext()
-                    },
-                    onSwipeRight = {
-                        if (mainContentState.currentIptv.urlList.size > 1) {
-                            mainContentState.changeCurrentIptv(
-                                iptv = mainContentState.currentIptv,
-                                urlIdx = mainContentState.currentIptvUrlIdx - 1,
-                            )
-                        }
-                    },
-                    onSwipeLeft = {
-                        if (mainContentState.currentIptv.urlList.size > 1) {
-                            mainContentState.changeCurrentIptv(
-                                iptv = mainContentState.currentIptv,
-                                urlIdx = mainContentState.currentIptvUrlIdx + 1,
-                            )
-                        }
-                    },
                 ),
         )
 

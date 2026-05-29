@@ -1,7 +1,6 @@
 package top.yogiczy.mytv.ui.screens.leanback.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -18,7 +17,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -55,8 +53,7 @@ fun LeanbackSettingsScreen(
                 bottom = childPadding.bottom,
                 start = childPadding.start,
                 end = childPadding.end,
-            )
-            .pointerInput(Unit) { detectTapGestures(onTap = { }) },
+            ),
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(40.dp),

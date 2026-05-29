@@ -1,7 +1,7 @@
 package top.yogiczy.mytv.ui.screens.leanback.panel.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,8 +27,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.Border
-import androidx.tv.material3.CardDefaults
 import top.yogiczy.mytv.data.entities.EpgProgramme
 import top.yogiczy.mytv.data.entities.EpgProgramme.Companion.progress
 import top.yogiczy.mytv.data.entities.Iptv
@@ -62,8 +60,7 @@ fun LeanbackPanelIptvItem(
         }
     }
 
-    androidx.tv.material3.Card(
-        onClick = { },
+    Box(
         modifier = modifier
             .width(130.dp)
             .height(54.dp)
@@ -72,6 +69,11 @@ fun LeanbackPanelIptvItem(
                 isFocused = it.isFocused || it.hasFocus
                 if (isFocused) onFocused()
             }
+            .border(
+                width = 1.dp,
+                color = if (isFocused) MaterialTheme.colorScheme.onBackground else Color.Transparent,
+                shape = MaterialTheme.shapes.small,
+            )
             .handleLeanbackKeyEvents(
                 onSelect = {
                     if (isFocused) onIptvSelected()
@@ -85,20 +87,13 @@ fun LeanbackPanelIptvItem(
                     if (isFocused) onShowEpg()
                     else focusRequester.requestFocus()
                 }
-            ),
-        colors = CardDefaults.colors(
-            containerColor = Color.Transparent,
-        ),
-        border = CardDefaults.border(
-            focusedBorder = Border(
-                border = BorderStroke(width = 1.dp, color = MaterialTheme.colorScheme.onBackground),
-            ),
-        ),
+            )
     ) {
         Box(
             modifier = Modifier.background(
                 color = if (isFocused) MaterialTheme.colorScheme.onBackground
                 else MaterialTheme.colorScheme.background,
+                shape = MaterialTheme.shapes.small,
             ),
         ) {
             Column(
@@ -115,14 +110,16 @@ fun LeanbackPanelIptvItem(
                     else MaterialTheme.colorScheme.onBackground,
                 )
 
-                Text(
-                    text = currentProgramme?.title ?: "",
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    modifier = Modifier.alpha(0.8f),
-                    color = if (isFocused) MaterialTheme.colorScheme.background
-                    else MaterialTheme.colorScheme.onBackground,
-                )
+                if (currentProgramme != null) {
+                    Text(
+                        text = currentProgramme.title,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        modifier = Modifier.alpha(0.8f),
+                        color = if (isFocused) MaterialTheme.colorScheme.background
+                        else MaterialTheme.colorScheme.onBackground,
+                    )
+                }
             }
 
             // 节目进度条
