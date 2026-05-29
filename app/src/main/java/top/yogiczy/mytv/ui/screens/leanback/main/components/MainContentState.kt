@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.yogiczy.mytv.data.entities.Iptv
@@ -23,12 +24,14 @@ import kotlin.math.max
 
 @Stable
 class LeanbackMainContentState(
-    coroutineScope: CoroutineScope,
+    private val coroutineScope: CoroutineScope,
     private val videoPlayerState: LeanbackVideoPlayerState,
     private val iptvGroupList: IptvGroupList,
 ) : Loggable() {
     private val iptvList = iptvGroupList.iptvList
     private val iptvIndexMap = iptvList.withIndex().associate { it.value to it.index }
+    private val playableHostList = SP.iptvPlayableHostList.toMutableSet()
+    private var showTempPanelJob: Job? = null
 
     private var _currentIptv by mutableStateOf(Iptv())
     val currentIptv get() = _currentIptv
@@ -80,16 +83,22 @@ class LeanbackMainContentState(
             }
 
             // 记忆可播放的域名
-            SP.iptvPlayableHostList += getUrlHost(_currentIptv.urlList[_currentIptvUrlIdx])
+            playableHostList += getUrlHost(_currentIptv.urlList[_currentIptvUrlIdx])
+            SP.iptvPlayableHostList = playableHostList
         }
 
         videoPlayerState.onError {
+            val failedUrl = _currentIptv.urlList.getOrNull(_currentIptvUrlIdx)
+
             if (_currentIptvUrlIdx < _currentIptv.urlList.size - 1) {
                 changeCurrentIptv(_currentIptv, _currentIptvUrlIdx + 1)
             }
 
             // 从记忆中删除不可播放的域名
-            SP.iptvPlayableHostList -= getUrlHost(_currentIptv.urlList[_currentIptvUrlIdx])
+            if (failedUrl != null) {
+                playableHostList -= getUrlHost(failedUrl)
+                SP.iptvPlayableHostList = playableHostList
+            }
         }
 
         videoPlayerState.onCutoff {
@@ -119,10 +128,16 @@ class LeanbackMainContentState(
         if (iptv == _currentIptv && urlIdx == null) return
 
         if (iptv == _currentIptv && urlIdx != _currentIptvUrlIdx) {
-            SP.iptvPlayableHostList -= getUrlHost(_currentIptv.urlList[_currentIptvUrlIdx])
+            playableHostList -= getUrlHost(_currentIptv.urlList[_currentIptvUrlIdx])
+            SP.iptvPlayableHostList = playableHostList
         }
 
-        _isTempPanelVisible = true
+        showTempPanelJob?.cancel()
+        _isTempPanelVisible = false
+        showTempPanelJob = coroutineScope.launch {
+            delay(120)
+            _isTempPanelVisible = true
+        }
 
         _currentIptv = iptv
         SP.iptvLastIptvIdx = currentIptvIndex()
@@ -130,7 +145,7 @@ class LeanbackMainContentState(
         _currentIptvUrlIdx = if (urlIdx == null) {
             // 优先从记忆中选择可播放的域名
             max(0, _currentIptv.urlList.indexOfFirst {
-                SP.iptvPlayableHostList.contains(getUrlHost(it))
+                playableHostList.contains(getUrlHost(it))
             })
         } else {
             (urlIdx + _currentIptv.urlList.size) % _currentIptv.urlList.size

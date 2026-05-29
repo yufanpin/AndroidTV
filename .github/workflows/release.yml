@@ -31,8 +31,24 @@ jobs:
       - name: 设置Gradle缓存
         uses: gradle/actions/setup-gradle@v4
 
+      - name: 检查签名密钥
+        run: |
+          missing=0
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::${name} 未配置。正式 Release 需要签名密钥；家庭自用请运行 Debug APK Release。"
+              missing=1
+            fi
+          done
+          exit $missing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
       - name: 解码生成 jks
-        run: echo $KEYSTORE_BASE64 | base64 -di > app/keystore.jks
+        run: printf "%s" "$KEYSTORE_BASE64" | base64 -d > app/keystore.jks
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
