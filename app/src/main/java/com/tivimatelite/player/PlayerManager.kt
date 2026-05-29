@@ -1,0 +1,107 @@
+package com.tivimatelite.player
+
+import android.content.Context
+import android.util.Log
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.source.LoadEventInfo
+import androidx.media3.exoplayer.source.MediaLoadData
+
+@UnstableApi
+object PlayerManager {
+    private const val TAG = "PlayerManager"
+    private const val MIN_BUFFER_MS = 1_000
+    private const val MAX_BUFFER_MS = 4_000
+    private const val PLAYBACK_BUFFER_MS = 500
+    private const val REBUFFER_MS = 1_000
+
+    @Volatile
+    private var player: ExoPlayer? = null
+
+    fun getPlayer(context: Context): ExoPlayer {
+        return player ?: synchronized(this) {
+            player ?: buildPlayer(context.applicationContext).also { player = it }
+        }
+    }
+
+    fun play(context: Context, url: String) {
+        val exoPlayer = getPlayer(context)
+        exoPlayer.setMediaItem(MediaItem.fromUri(url))
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true
+    }
+
+    fun pause() {
+        player?.pause()
+    }
+
+    fun release() {
+        synchronized(this) {
+            player?.release()
+            player = null
+        }
+    }
+
+    private fun buildPlayer(context: Context): ExoPlayer {
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                MIN_BUFFER_MS,
+                MAX_BUFFER_MS,
+                PLAYBACK_BUFFER_MS,
+                REBUFFER_MS
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+
+        return ExoPlayer.Builder(context)
+            .setLoadControl(loadControl)
+            .build()
+            .apply {
+                addListener(playbackListener)
+                addAnalyticsListener(codecAnalyticsListener)
+            }
+    }
+
+    private val playbackListener = object : Player.Listener {
+        override fun onPlayerError(error: PlaybackException) {
+            if (isCodecFailure(error)) {
+                Log.e(TAG, "Hardware decoder failure captured", error)
+                player?.stop()
+                return
+            }
+            Log.e(TAG, "Playback error captured", error)
+        }
+    }
+
+    private val codecAnalyticsListener = object : AnalyticsListener {
+        override fun onLoadError(
+            eventTime: AnalyticsListener.EventTime,
+            loadEventInfo: LoadEventInfo,
+            mediaLoadData: MediaLoadData,
+            error: java.io.IOException,
+            wasCanceled: Boolean
+        ) {
+            Log.w(TAG, "Stream load error captured", error)
+        }
+    }
+
+    private fun isCodecFailure(error: Throwable): Boolean {
+        var current: Throwable? = error
+        while (current != null) {
+            val name = current.javaClass.name
+            if (name.contains("MediaCodec", ignoreCase = true) ||
+                name.contains("MediaCodecVideoRenderer", ignoreCase = true) ||
+                name.contains("DecoderInitializationException", ignoreCase = true)
+            ) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
+    }
+}

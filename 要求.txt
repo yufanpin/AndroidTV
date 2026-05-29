@@ -1,0 +1,66 @@
+# 角色与核心目标
+你是一个专攻 Android TV 硬件性能压榨、音视频底层的架构师。
+我们现在要完全像素级致敬 TiviMate 的核心架构，为超低配网络机顶盒（晶晨 S905L3 芯片，2GB RAM + 8GB ROM，Android 9 / API 28）开发一个运行内存（RAM）常驻不超过 60MB、绝对不掉帧、秒切台的 IPTV 软件，项目命名为 "TiviMateLite"。
+
+## 🛠️ 终极技术栈规范（必须严格遵守，不接受任何替代方案）
+1. 开发语言：100% 纯 Kotlin。
+2. UI 架构：基于传统 XML 布局 + `RecyclerView` + `ViewBinding`（坚决拒绝 Jetpack Compose，拒绝任何 WebView 或跨平台框架）。
+3. 播放内核：`androidx.media3:media3-exoplayer` 稳定版（调用 Android 9 底层 C++ MediaCodec 硬解）。
+4. 并发机制：Kotlin Coroutines（协程）+ Kotlin Flow（彻底解放主线程）。
+5. 视觉规范：全界面采用纯黑色（#000000）或深灰色背景，无任何动画过渡，杜绝 GPU 过度绘制（Overdraw）。
+
+---
+
+# 🔴 请实时生成：第一部分 - 项目工程配置与全局单例播放器
+
+## 1.1 项目构建配置
+请直接输出 `app/build.gradle.kts` 的核心配置，只保留对本项目至关重要的轻量级依赖：
+- 引入 `androidx.media3:media3-exoplayer`、`androidx.media3:media3-ui`。
+- 引入 `androidx.room:room-runtime` 和 `androidx.room:room-ktx`。
+- 引入最新版 `com.github.bumptech.glide:glide`。
+- 开启 ViewBinding：`viewBinding = true`。
+
+## 1.2 全局单例播放器初始化代码
+请编写一个 Kotlin 静态单例管理类 `PlayerManager.kt`。
+- 要求 1：全局只允许存在一个 `ExoPlayer` 实例，切台时严禁销毁重新创建，仅复用 `setMediaItem` 和 `prepare`。
+- 要求 2：必须自定义 `DefaultLoadControl`。针对 2GB 内存限制，将最小起播缓冲（minBufferMs）设为 1000ms（实现秒开），最大缓冲（maxBufferMs）限制在 4000ms 以内，防止缓冲区塞爆内存。
+- 要求 3：对 ExoPlayer 注册监听器，当遭遇硬件解码失败（MediaCodecVideoRenderer 异常）时，提供向下兼容捕获，防止应用崩溃。
+
+---
+
+# 🟡 请实时生成：第二部分 - 零主线程阻塞的流式 M3U8 解析器
+
+在 S905L3 上，一次性读取数万行的直播源文本会导致内存瞬间崩溃或触发长时间 GC 导致主线程假死。
+
+## 2.1 流式解析器代码
+请使用 Kotlin 协程编写 `M3U8Parser.kt`：
+- 要求 1：必须使用 `BufferedReader.lineSequence()` 逐行异步读取输入流（网络或本地文件），严禁将整个文本或大型 String 载入内存。
+- 要求 2：整个解析逻辑必须强制包裹在 `withContext(Dispatchers.IO)` 中。
+- 要求 3：解析过程中只提取 `#EXTINF` 对应的信息（频道名、台标 URL、分组名）和下一行的播放 URL，并实时封装为轻量级 Data Class。解析完成后，利用 Kotlin `Flow` 增量发射（emit）数据，禁止一次性返回包含数万条数据的 List。
+
+---
+
+# 🔵 请实时生成：第三部分 - 仿 TiviMate 经典单 Activity 双列半透明 UI
+
+## 3.1 极致扁平的 XML 布局
+请生成全屏主界面的布局文件 `activity_main.xml`：
+- 要求 1：层级必须控制在 3 层以内。
+- 要求 2：底层为全屏的 `androidx.media3.ui.PlayerView`。
+- 要求 3：顶层覆盖一个半透明遮罩容器（默认隐藏 `android:visibility="gone"`），背景为纯色 `#D9000000`（无渐变、无图片）。该容器左侧是一个固定宽度（如 300dp）的 `RecyclerView` 用于展示频道列表，右侧是当前选中频道的 EPG 文本详情。
+
+## 3.2 焦点（Focus）控制与按键防抖逻辑
+请生成 `MainActivity.kt` 核心逻辑：
+- 要求 1：遥控器交互逻辑——按下“确认键”或“方向键”时，半透明 Overlay 菜单无动画瞬间浮现，焦点强制锁定在左侧的 `RecyclerView`。按下“返回键”时，菜单隐藏，焦点归还给底层播放器。
+- 要求 2：引入 **300毫秒按键防抖（Debounce）** 机制。当用户按住遥控器上下键快速在列表中滚动时，仅刷新 UI。只有当焦点停留在某个频道超过 300ms 且没有继续移动时，才真正触发 `PlayerManager` 去切台起播，防止高频切台导致 I/O 和解码器锁死。
+
+---
+
+# 🟢 请实时生成：第四部分 - 极致复用的列表适配器（ChannelAdapter）
+
+## 4.1 高性能 Adapter 源码
+请生成 `ChannelAdapter.kt` 源码：
+- 要求 1：完美实现 ViewBinding 静态 Holder 机制，关闭 Stable IDs，采用 `DiffUtil` 进行异步数据的精准局部刷新，严禁使用 `notifyDataSetChanged()`。
+- 要求 2：`onBindViewHolder` 方法必须达到极致性能。严禁在其中进行任何 `String` 拼接、对象创建或复杂的逻辑分支判断。
+- 要求 3：Glide 台标加载优化：必须在加载时强制指定 `.override(64, 64)` 将分辨率压到极低，并指定解码格式为 `DecodeFormat.PREFER_RGB_565`（比默认的 ARGB_8888 节省一半内存），并且只在列表静止时才加载图片。
+
+请按照上述模块规范，不要省略，直接开始为我实时生成完整、可直接编译的核心 Kotlin 源码和 XML 代码。首先从【第一部分：1.2 全局单例播放器管理类 `PlayerManager.kt`】开始。
