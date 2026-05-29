@@ -98,7 +98,7 @@ fun LeanbackPanelIptvItem(
         Box(
             modifier = Modifier.background(
                 color = if (isFocused) MaterialTheme.colorScheme.onBackground
-                else MaterialTheme.colorScheme.background.copy(alpha = 0.8f),
+                else MaterialTheme.colorScheme.background,
             ),
         ) {
             Column(
@@ -133,8 +133,8 @@ fun LeanbackPanelIptvItem(
                         .fillMaxWidth(currentProgramme.progress())
                         .height(3.dp)
                         .background(
-                            if (isFocused) MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
-                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                            if (isFocused) MaterialTheme.colorScheme.surface
+                            else MaterialTheme.colorScheme.onSurface
                         ),
                 )
             }

@@ -35,7 +35,7 @@ fun LeanbackSettingsCategoryList(
     focusedCategoryProvider: () -> LeanbackSettingsCategories = { LeanbackSettingsCategories.entries.first() },
     onFocused: (LeanbackSettingsCategories) -> Unit = {},
 ) {
-    var hasFocused = rememberSaveable { false }
+    var hasFocused by rememberSaveable { mutableStateOf(false) }
 
     TvLazyColumn(
         contentPadding = PaddingValues(vertical = 4.dp),

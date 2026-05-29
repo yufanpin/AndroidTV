@@ -65,7 +65,7 @@ fun LeanbackPanelTempScreen(
                             .align(Alignment.BottomStart)
                             .fillMaxWidth(currentProgrammes.now.progress())
                             .height(3.dp)
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)),
+                            .background(MaterialTheme.colorScheme.onSurface),
                     )
                 }
             },
@@ -75,7 +75,7 @@ fun LeanbackPanelTempScreen(
                 )
                 .align(Alignment.BottomStart)
                 .background(
-                    MaterialTheme.colorScheme.background.copy(alpha = 0.8f),
+                    MaterialTheme.colorScheme.background,
                     MaterialTheme.shapes.medium,
                 )
                 .clip(MaterialTheme.shapes.medium),

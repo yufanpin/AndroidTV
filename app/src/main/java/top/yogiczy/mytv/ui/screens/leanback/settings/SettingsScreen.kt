@@ -21,6 +21,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import top.yogiczy.mytv.ui.rememberLeanbackChildPadding
 import top.yogiczy.mytv.ui.screens.leanback.settings.components.LeanbackSettingsCategoryContent
 import top.yogiczy.mytv.ui.screens.leanback.settings.components.LeanbackSettingsCategoryList
@@ -37,6 +38,12 @@ fun LeanbackSettingsScreen(
     }
 
     var focusedCategory by remember { mutableStateOf(LeanbackSettingsCategories.entries.first()) }
+    var displayedCategory by remember { mutableStateOf(focusedCategory) }
+
+    LaunchedEffect(focusedCategory) {
+        delay(120)
+        displayedCategory = focusedCategory
+    }
 
     Box(
         modifier = modifier
@@ -61,7 +68,7 @@ fun LeanbackSettingsScreen(
             )
 
             LeanbackSettingsCategoryContent(
-                focusedCategoryProvider = { focusedCategory },
+                focusedCategoryProvider = { displayedCategory },
             )
         }
     }

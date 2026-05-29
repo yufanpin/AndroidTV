@@ -61,7 +61,7 @@ fun LeanbackPanelIptvGroupList(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         contentPadding = PaddingValues(bottom = childPadding.bottom),
     ) {
-        itemsIndexed(iptvGroupList) { index, iptvGroup ->
+        itemsIndexed(iptvGroupList, key = { index, group -> "$index-${group.name}" }) { index, iptvGroup ->
             Row(
                 modifier = Modifier.padding(start = childPadding.start),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),

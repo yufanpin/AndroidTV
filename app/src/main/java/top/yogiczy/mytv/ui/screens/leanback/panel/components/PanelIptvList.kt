@@ -19,8 +19,8 @@ import androidx.tv.foundation.lazy.list.items
 import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import kotlinx.coroutines.flow.distinctUntilChanged
 import top.yogiczy.mytv.data.entities.Epg
-import top.yogiczy.mytv.data.entities.Epg.Companion.currentProgrammes
 import top.yogiczy.mytv.data.entities.EpgList
+import top.yogiczy.mytv.data.entities.EpgList.Companion.currentProgrammes
 import top.yogiczy.mytv.data.entities.Iptv
 import top.yogiczy.mytv.data.entities.IptvList
 import top.yogiczy.mytv.ui.rememberLeanbackChildPadding
@@ -65,12 +65,11 @@ fun LeanbackPanelIptvList(
             end = childPadding.end,
         ),
     ) {
-        items(iptvList) { iptv ->
+        items(iptvList, key = { "${it.name}-${it.channelName}-${it.urlList.firstOrNull().orEmpty()}" }) { iptv ->
             LeanbackPanelIptvItem(
                 iptvProvider = { iptv },
                 currentProgrammeProvider = {
-                    epgListProvider().firstOrNull { epg -> epg.channel == iptv.channelName }
-                        ?.currentProgrammes()?.now
+                    epgListProvider().currentProgrammes(iptv)?.now
                 },
                 showProgrammeProgressProvider = { showProgrammeProgressProvider() },
                 onIptvSelected = { onIptvSelected(iptv) },
