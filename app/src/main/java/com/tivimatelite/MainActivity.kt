@@ -483,6 +483,11 @@ class MainActivity : AppCompatActivity() {
         val nowMs = System.currentTimeMillis()
         if (nowMs - lastSingleSourceRetryAtMs < SINGLE_SOURCE_RETRY_MIN_GAP_MS) return
 
+        if (singleSourceRetryCount >= SINGLE_SOURCE_RETRY_MAX_COUNT) {
+            AppLogStore.e(TAG, "Max retry attempts reached for ${group.name}, giving up until user switches channel")
+            return
+        }
+
         singleSourceRetryCount += 1
         val retryDelayMs = (SINGLE_SOURCE_RETRY_BASE_MS * singleSourceRetryCount.toLong())
             .coerceAtMost(SINGLE_SOURCE_RETRY_MAX_MS)
@@ -490,13 +495,15 @@ class MainActivity : AppCompatActivity() {
 
         AppLogStore.w(
             TAG,
-            "Single-source retry for ${group.name}, reason=$reason, attempt=$singleSourceRetryCount, delayMs=$retryDelayMs"
+            "Single-source retry for ${group.name}, reason=$reason, attempt=$singleSourceRetryCount/$SINGLE_SOURCE_RETRY_MAX_COUNT, delayMs=$retryDelayMs"
         )
 
         singleSourceRetryJob?.cancel()
         singleSourceRetryJob = scope.launch {
             delay(retryDelayMs)
             if (currentChannelIndex !in channelGroups.indices) return@launch
+            attemptedSourceIndexes.clear()
+            hlsRetriedSourceIndexes.clear()
             currentSourceIndex = 0
             playCurrentSource(resetAttempts = false)
         }
@@ -657,6 +664,7 @@ class MainActivity : AppCompatActivity() {
         private const val SINGLE_SOURCE_RETRY_BASE_MS = 8000L
         private const val SINGLE_SOURCE_RETRY_MAX_MS = 20000L
         private const val SINGLE_SOURCE_RETRY_MIN_GAP_MS = 10000L
+        private const val SINGLE_SOURCE_RETRY_MAX_COUNT = 5
         private const val NET_SPEED_UPDATE_MS = 1000L
     }
 }
