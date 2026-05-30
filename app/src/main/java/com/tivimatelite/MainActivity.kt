@@ -498,7 +498,7 @@ class MainActivity : AppCompatActivity() {
             delay(retryDelayMs)
             if (currentChannelIndex !in channelGroups.indices) return@launch
             currentSourceIndex = 0
-            playCurrentSource(resetAttempts = false, forceHls = true)
+            playCurrentSource(resetAttempts = false)
         }
     }
 
@@ -645,18 +645,18 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "MainActivity"
         private const val BACKEND_INFO_AUTO_HIDE_MS = 4000L
-        private const val BUFFERING_FAILOVER_MS = 10000L
+        private const val BUFFERING_FAILOVER_MS = 20000L
         private const val CHANNEL_ZAP_DEBOUNCE_MS = 300L
         private const val CHANNEL_NUMBER_HIDE_MS = 1500L
         private const val NUMERIC_INPUT_COMMIT_MS = 900L
-        private const val READY_STALL_CHECK_INTERVAL_MS = 2000L
-        private const val READY_STALL_TIMEOUT_MS = 30000L
-        private const val READY_STALL_ADVANCE_TOLERANCE_MS = 200L
-        private const val READY_STALL_WARMUP_MS = 15000L
-        private const val READY_STALL_RECOVERY_COOLDOWN_MS = 60000L
-        private const val SINGLE_SOURCE_RETRY_BASE_MS = 2500L
-        private const val SINGLE_SOURCE_RETRY_MAX_MS = 8000L
-        private const val SINGLE_SOURCE_RETRY_MIN_GAP_MS = 4000L
+        private const val READY_STALL_CHECK_INTERVAL_MS = 3000L
+        private const val READY_STALL_TIMEOUT_MS = 60000L
+        private const val READY_STALL_ADVANCE_TOLERANCE_MS = 500L
+        private const val READY_STALL_WARMUP_MS = 30000L
+        private const val READY_STALL_RECOVERY_COOLDOWN_MS = 120000L
+        private const val SINGLE_SOURCE_RETRY_BASE_MS = 8000L
+        private const val SINGLE_SOURCE_RETRY_MAX_MS = 20000L
+        private const val SINGLE_SOURCE_RETRY_MIN_GAP_MS = 10000L
         private const val NET_SPEED_UPDATE_MS = 1000L
     }
 }
