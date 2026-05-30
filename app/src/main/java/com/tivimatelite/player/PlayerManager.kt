@@ -12,8 +12,6 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
-import androidx.media3.exoplayer.audio.AudioSink
-import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
@@ -86,33 +84,18 @@ object PlayerManager {
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+        val renderersFactory = DefaultRenderersFactory(context)
+            .setEnableAudioOutputPlaybackParameters(true)
 
         return ExoPlayer.Builder(context)
             .setLoadControl(loadControl)
             .setMediaSourceFactory(mediaSourceFactory)
-            .setRenderersFactory(buildRenderersFactory(context))
+            .setRenderersFactory(renderersFactory)
             .build()
             .apply {
                 addListener(playbackListener)
                 addAnalyticsListener(codecAnalyticsListener)
             }
-    }
-
-    @OptIn(UnstableApi::class)
-    private fun buildRenderersFactory(context: Context): DefaultRenderersFactory {
-        return object : DefaultRenderersFactory(context) {
-            @OptIn(UnstableApi::class)
-            override fun buildAudioSink(
-                context: Context,
-                enableAudioTrackPlaybackParams: Boolean,
-                enableOffload: Boolean,
-                enableLowLatency: Boolean
-            ): AudioSink {
-                return DefaultAudioSink.Builder(context)
-                    .setEnableAudioTrackPlaybackParams(true)
-                    .build()
-            }
-        }
     }
 
     private val playbackListener = object : Player.Listener {
