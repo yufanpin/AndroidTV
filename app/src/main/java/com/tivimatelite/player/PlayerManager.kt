@@ -59,6 +59,7 @@ object PlayerManager {
         }
     }
 
+    @OptIn(UnstableApi::class)
     private fun buildPlayer(context: Context): ExoPlayer {
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
