@@ -1,6 +1,7 @@
 package com.tivimatelite.web
 
 import android.content.Context
+import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -161,7 +162,7 @@ object PlaylistStore {
         getPrefs(context).edit().putString(KEY_SELECTED_ID, id).apply()
     }
 
-    private fun getPrefs(context: Context) {
+    private fun getPrefs(context: Context): SharedPreferences {
         return context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 }
