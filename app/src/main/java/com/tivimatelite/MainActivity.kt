@@ -1,11 +1,11 @@
 package com.tivimatelite
 
-import android.app.Activity
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import androidx.annotation.OptIn
+import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.util.UnstableApi
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -24,7 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(UnstableApi::class)
-class MainActivity : Activity() {
+class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: ChannelAdapter
     private val scope = MainScope()
@@ -146,9 +146,13 @@ class MainActivity : Activity() {
     }
 
     private fun playChannel(channel: Channel) {
-        PlayerManager.play(this, channel.streamUrl)
-        adapter.setSelectedUrl(channel.streamUrl)
-        PlaybackHistoryStore.saveLastPlayedUrl(this, channel.streamUrl)
+        try {
+            PlayerManager.play(this, channel.streamUrl)
+            adapter.setSelectedUrl(channel.streamUrl)
+            PlaybackHistoryStore.saveLastPlayedUrl(this, channel.streamUrl)
+        } catch (exception: Throwable) {
+            Log.e(TAG, "playChannel failed: ${channel.streamUrl}", exception)
+        }
     }
 
     private fun showOverlay() {
