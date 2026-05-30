@@ -1,0 +1,616 @@
+﻿--------- beginning of system
+05-30 16:18:18.478 I/ActivityManager( 3465): Force stopping com.tivimatelite appid=10059 user=0: from pid 4621
+05-30 16:18:18.480 I/ActivityManager( 3465): Killing 4185:com.jdiptv.tvhd/u0a52 (adj 906): empty #17
+--------- beginning of main
+05-30 16:18:18.481 W/libprocessgroup( 3465): kill(-4185, 9) failed: No such process
+05-30 16:18:18.525 W/libprocessgroup( 3465): kill(-4185, 9) failed: No such process
+05-30 16:18:18.537 I/Zygote  ( 3139): Process 4185 exited due to signal (9)
+05-30 16:18:18.570 W/libprocessgroup( 3465): kill(-4185, 9) failed: No such process
+05-30 16:18:18.570 I/libprocessgroup( 3465): Successfully killed process cgroup uid 10052 pid 4185 in 88ms
+05-30 16:18:18.609 I/system_server( 3465): Background concurrent copying GC freed 2921(599KB) AllocSpace objects, 48(960KB) LOS objects, 19% free, 6MB/8MB, paused 211us total 117.565ms
+05-30 16:18:28.615 I/system_server( 3465): Background concurrent copying GC freed 4574(731KB) AllocSpace objects, 52(1104KB) LOS objects, 19% free, 6MB/8MB, paused 438us total 126.690ms
+05-30 16:18:28.900 I/ActivityManager( 3465): START u0 {flg=0x10000000 cmp=com.tivimatelite/.SplashActivity} from uid 0
+05-30 16:18:28.930 W/System  ( 3465): ClassLoader referenced unknown path: 
+05-30 16:18:28.967 I/ActivityManager( 3465): Start proc 4633:com.tivimatelite/u0a59 for activity com.tivimatelite/.SplashActivity
+05-30 16:18:28.974 I/Zygote  ( 4633): seccomp disabled by setenforce 0
+05-30 16:18:28.983 I/om.tivimatelit( 4633): Late-enabling -Xcheck:jni
+05-30 16:18:29.029 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:29.031 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:29.049 W/om.tivimatelit( 4633): Using default instruction set features for ARM CPU variant (cortex-a9) using conservative defaults
+05-30 16:18:29.050 E/gralloc ( 3465): ioctl c0044901 failed with code -1: Invalid argument
+05-30 16:18:29.138 I/ConfigStore( 3465): android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasWideColorDisplay retrieved: 0
+05-30 16:18:29.143 I/ConfigStore( 3465): android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasHDRDisplay retrieved: 0
+05-30 16:18:29.143 I/OpenGLRenderer( 3465): Initialized EGL, version 1.4
+05-30 16:18:29.143 D/OpenGLRenderer( 3465): Swap behavior 1
+05-30 16:18:29.168 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:29.169 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:29.181 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:29.182 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:29.223 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:29.225 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:29.236 W/ActivityManager( 3465): getTaskSnapshot: taskId=5098 not found
+05-30 16:18:29.619 D/AppCompatDelegate( 4633): Checking for metadata for AppLocalesMetadataHolderService : Service not found
+05-30 16:18:29.906 D/OpenGLRenderer( 4633): Skia GL Pipeline
+05-30 16:18:29.982 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:29.983 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:29.985 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:29.986 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:29.988 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:29.989 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:29.989 I/ConfigStore( 4633): android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasWideColorDisplay retrieved: 0
+05-30 16:18:29.990 I/ConfigStore( 4633): android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasHDRDisplay retrieved: 0
+05-30 16:18:29.990 I/OpenGLRenderer( 4633): Initialized EGL, version 1.4
+05-30 16:18:29.990 D/OpenGLRenderer( 4633): Swap behavior 1
+05-30 16:18:30.049 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:30.054 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:30.064 E/gralloc ( 4633): ioctl c0044901 failed with code -1: Invalid argument
+05-30 16:18:30.123 I/ActivityManager( 3465): Displayed com.tivimatelite/.SplashActivity: +1s180ms
+05-30 16:18:30.134 W/SurfaceFlinger( 3255): Attempting to set client state on removed layer: Splash Screen com.tivimatelite#0
+05-30 16:18:30.134 W/SurfaceFlinger( 3255): Attempting to destroy on removed layer: Splash Screen com.tivimatelite#0
+05-30 16:18:30.198 W/SourceFile( 3945): [callActivityOnStop:1432] LC onStop
+05-30 16:18:30.199 W/SourceFile( 3945): [r:64] LC onStop
+05-30 16:18:30.199 W/SourceFile( 3945): [K:15] Transition to state-disabled
+05-30 16:18:30.199 W/SourceFile( 3945): [K:15] Unbind state: state-default
+05-30 16:18:30.199 W/SourceFile( 3945): [K:15] Bind state: state-disabled
+05-30 16:18:30.209 W/SourceFile( 3945): [r:64] LC onStop
+05-30 16:18:30.242 W/SourceFile( 3945): [performDestroy:7395] LC onDestroy
+05-30 16:18:30.243 W/SourceFile( 3945): [h:83] LC onDestroyView
+05-30 16:18:30.923 I/ActivityManager( 3465): START u0 {cmp=com.tivimatelite/.MainActivity} from uid 10059
+05-30 16:18:30.961 W/ActivityThread( 4633): handleWindowVisibility: no activity for token android.os.BinderProxy@33f9d16
+05-30 16:18:31.708 I/TiviMateLite( 4633): AdminServerManager: Local admin server started on port 5220
+05-30 16:18:31.726 I/TiviMateLite( 4633): MainActivity: Admin ready at http://192.168.10.240:5220/
+05-30 16:18:31.755 I/TiviMateLite( 4633): PlayerManager: Enabled audio playback params via setEnableAudioTrackPlaybackParams
+05-30 16:18:31.767 I/ExoPlayerImpl( 4633): Init 6552204 [AndroidXMedia3/1.5.1] [Smart Box, Smart Box, SKTWORTH, 28]
+05-30 16:18:32.006 D/NetworkSecurityConfig( 4633): No Network Security Config specified, using platform default
+05-30 16:18:32.175 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:32.179 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:32.228 I/ActivityManager( 3465): Displayed com.tivimatelite/.MainActivity: +1s251ms
+05-30 16:18:32.292 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:32.294 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:32.303 I/TiviMateLite( 4633): RemotePlaylistRepo: Remote playlist loaded from 鍐呯疆婧?
+05-30 16:18:32.325 I/TiviMateLite( 4633): MainActivity: Loaded channels from remote backend: 鍐呯疆婧?
+05-30 16:18:32.435 I/TiviMateLite( 4633): MainActivity: Playing CCTV-01 source 4/5
+05-30 16:18:32.936 W/AudioCapabilities( 4633): Unsupported mime audio/dtshd
+05-30 16:18:33.014 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:33.018 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:33.037 W/VideoCapabilities( 4633): Unsupported mime video/dolby-vision
+05-30 16:18:33.046 W/VideoCapabilities( 4633): Unsupported mime video/dolby-vision
+05-30 16:18:33.098 W/VideoCapabilities( 4633): Unrecognized profile 4 for video/hevc
+05-30 16:18:33.108 W/VideoCapabilities( 4633): Unrecognized profile/level 0/3 for video/mpeg2
+05-30 16:18:33.108 I/VideoCapabilities( 4633): Unsupported profile 2 for video/mpeg2
+05-30 16:18:33.108 I/VideoCapabilities( 4633): Unsupported profile 3 for video/mpeg2
+05-30 16:18:33.108 I/VideoCapabilities( 4633): Unsupported profile 4 for video/mpeg2
+05-30 16:18:33.108 I/VideoCapabilities( 4633): Unsupported profile 5 for video/mpeg2
+05-30 16:18:33.117 W/VideoCapabilities( 4633): Unrecognized profile/level 0/3 for video/mpeg2
+05-30 16:18:33.117 I/VideoCapabilities( 4633): Unsupported profile 2 for video/mpeg2
+05-30 16:18:33.117 I/VideoCapabilities( 4633): Unsupported profile 3 for video/mpeg2
+05-30 16:18:33.117 I/VideoCapabilities( 4633): Unsupported profile 4 for video/mpeg2
+05-30 16:18:33.117 I/VideoCapabilities( 4633): Unsupported profile 5 for video/mpeg2
+05-30 16:18:33.128 I/VideoCapabilities( 4633): Unsupported profile 2 for video/mp4v-es
+05-30 16:18:33.128 I/VideoCapabilities( 4633): Unsupported profile 4 for video/mp4v-es
+05-30 16:18:33.128 I/VideoCapabilities( 4633): Unsupported profile 8 for video/mp4v-es
+05-30 16:18:33.128 I/VideoCapabilities( 4633): Unsupported profile 16 for video/mp4v-es
+05-30 16:18:33.128 I/VideoCapabilities( 4633): Unsupported profile 32 for video/mp4v-es
+05-30 16:18:33.128 I/VideoCapabilities( 4633): Unsupported profile 64 for video/mp4v-es
+05-30 16:18:33.128 I/VideoCapabilities( 4633): Unsupported profile 128 for video/mp4v-es
+05-30 16:18:33.128 I/VideoCapabilities( 4633): Unsupported profile 256 for video/mp4v-es
+05-30 16:18:33.128 I/VideoCapabilities( 4633): Unsupported profile 512 for video/mp4v-es
+05-30 16:18:33.128 I/VideoCapabilities( 4633): Unsupported profile 1024 for video/mp4v-es
+05-30 16:18:33.128 I/VideoCapabilities( 4633): Unsupported profile 2048 for video/mp4v-es
+05-30 16:18:33.128 I/VideoCapabilities( 4633): Unsupported profile 4096 for video/mp4v-es
+05-30 16:18:33.129 I/VideoCapabilities( 4633): Unsupported profile 8192 for video/mp4v-es
+05-30 16:18:33.129 I/VideoCapabilities( 4633): Unsupported profile 16384 for video/mp4v-es
+05-30 16:18:33.147 I/system_server( 3465): Background concurrent copying GC freed 6533(773KB) AllocSpace objects, 34(872KB) LOS objects, 19% free, 6MB/8MB, paused 154us total 180.710ms
+05-30 16:18:33.212 I/VideoCapabilities( 4633): Unsupported profile 4 for video/mp4v-es
+05-30 16:18:33.504 I/OMXClient( 4633): IOmx service obtained
+05-30 16:18:33.505 I/OMXMaster( 3337): makeComponentInstance(OMX.amlogic.hevc.decoder.awesome) in omx@1.0-service process
+05-30 16:18:33.505 D/OmxComponentManagerImpl( 3337): support frame mode
+05-30 16:18:33.505 D/OmxComponentManagerImpl( 3337): use dv stream mode
+05-30 16:18:33.505 D/OmxComponentManagerImpl( 3337): support avs frame mode
+05-30 16:18:33.505 D/OmxComponentManagerImpl( 3337): format support multi-instance
+05-30 16:18:33.505 D/OmxComponentManagerImpl( 3337): getEntryByName_2_num=0, componentName:OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.506 V/AmlogicVideoDecoderAwesome( 3337): AmlogicVideoDecoder:103 >
+05-30 16:18:33.506 V/AmlogicVideoDecoderAwesome( 3337): initializeState_l:2027 >
+05-30 16:18:33.506 V/AmlogicVideoDecoderAwesome( 3337): media.omx.latency is not set used def=1.000000
+05-30 16:18:33.506 D/AmlogicVideoDecoderAwesome( 3337): AmlogicVideoDecoder, mOmxInstancenum 1, mOmxInstanceID 14
+05-30 16:18:33.506 W/AmlSysfsUtil( 3337): [amsysfs_get_sysfs_str] /sys/module/am_vecm/parameters/dolby_vision_enable failed!
+05-30 16:18:33.506 D/AmlogicVideoDecoderAwesome( 3337): mCheckDvesDone = 1
+05-30 16:18:33.507 W/OmxLogConf( 3337): Can not read property media.omx.log_levels, using 0
+05-30 16:18:33.507 W/OmxResManage( 3337): ResManWrapper init fail!
+05-30 16:18:33.507 V/AmlogicVideoDecoderAwesome( 3337): media.omx.out_buffer1 is not set used def=4
+05-30 16:18:33.507 D/OmxVideoDecoder( 3337): setInputCoding OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.507 D/OmxVideoDecoder( 3337): mIsLinux49=1, mIsLinux54=0, major=4, minor=9
+05-30 16:18:33.507 D/OmxVideoDecoder( 3337): multi dec exist
+05-30 16:18:33.507 D/OmxVideoDecoder( 3337): use dv stream mode
+05-30 16:18:33.507 D/OmxVideoDecoder( 3337): avs multi dec exist
+05-30 16:18:33.507 D/OmxVideoDecoder( 3337): Use frame mode for multidec.
+05-30 16:18:33.507 D/OmxVideoDecoder( 3337): Use min out buffer size
+05-30 16:18:33.507 D/OmxVideoDecoder( 3337): mSupportPiPVideo = 1
+05-30 16:18:33.508 D/OmxVideoDecoder( 3337): mMustOsdDisplay 0, mAmVideoUsed=0, mSupportPiPVideo=1, mPipVideoUsed=0, mVideoUsedByOmx=0
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337): OMX.amlogic.hevc.decoder.awesome : Vendor extensions supported (15)
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.4k-osd{{ enable : Int32 },  }
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.unstable-pts{{ enable : Int32 },  }
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.is-mvc{{ enable : Int32 },  }
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.is-flv{{ nContainIndex : Int32 },  }
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.dvconfig-box{{ disable : Int32 },  }
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.profile-level{{ n-profile : Int32 },  { n-level : Int32 },  }
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.nrdp{{ video-peek-in-tunnel : Int32 },  }
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.low-latency{{ enable : Int32 },  }
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.save-mem{{ enable : Int32 },  }
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.videoLayer{{ type : Int32 },  }
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.renderByOmx{{ enable : Int32 },  }
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.VideoQos{{ info : String },  }
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.rotation-angle{{ angle : Int32 },  }
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.McodecReport{{ info : String },  }
+05-30 16:18:33.508 D/OMX-VENDOR-EXT( 3337):    vendor.START.low-latency{{ enable : Int32 },  }
+05-30 16:18:33.508 D/OmxVideoDecoder( 3337): Current Video Play Sequence 14
+05-30 16:18:33.508 D/OmxComponentManagerImpl( 3337): IncreaseEntryNumByName pEntry->mNum=0, pEntry->mMaxNum:9,componentName:OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.508 I/omx_core( 3337): OMX_getHandle_num=1
+05-30 16:18:33.508 D/OmxComponent( 3337): mApkName=media.codec
+05-30 16:18:33.515 D/SurfaceUtils( 4633): connecting to surface 0x9033f808, reason connectToSurface
+05-30 16:18:33.516 I/MediaCodec( 4633): [OMX.amlogic.hevc.decoder.awesome] setting surface generation to 4744193
+05-30 16:18:33.516 D/SurfaceUtils( 4633): disconnecting from surface 0x9033f808, reason connectToSurface(reconnect)
+05-30 16:18:33.517 D/SurfaceUtils( 4633): connecting to surface 0x9033f808, reason connectToSurface(reconnect)
+05-30 16:18:33.518 I/AmAVUtils( 4633): AmAVUtils::getComponentRole isEncoder :0 mime:video/hevc 
+05-30 16:18:33.518 V/AVUtils ( 4633): AVUtils::getComponentRole
+05-30 16:18:33.518 D/OmxVideoDecoder( 3337): setParameter 1185 0x1000017
+05-30 16:18:33.518 D/OmxVideoDecoder( 3337): setInputCoding video_decoder.hevc
+05-30 16:18:33.519 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.enableAndroidNativeBuffers"
+05-30 16:18:33.519 D/OmxVideoDecoder( 3337): setParameter 1185 0x7f000000
+05-30 16:18:33.519 V/OmxVideoDecoder( 3337): setParameter 1720 EnableNativeBuffers 1
+05-30 16:18:33.519 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.519 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:640,h:480..
+05-30 16:18:33.519 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=640,portDef.format.video.nFrameHeight=480
+05-30 16:18:33.519 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.allocateNativeHandle"
+05-30 16:18:33.519 D/OmxVideoDecoder( 3337): setParameter 1185 0x7f00000a
+05-30 16:18:33.520 E/OMXNodeInstance( 3337): setParameter(0xa743b3ec:amlogic.hevc.decoder.awesome, OMX.google.android.index.allocateNativeHandle(0x7f00000a): Output:1 en=0) ERROR: UnsupportedSetting(0x80001019)
+05-30 16:18:33.520 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.storeANWBufferInMetadata"
+05-30 16:18:33.520 D/OmxVideoDecoder( 3337): setParameter 1185 0x7f00000d
+05-30 16:18:33.520 D/OmxVideoDecoder( 3337): setParameter 1740 OMX_GoogleAndroidStoreANWBufferInMetadata
+05-30 16:18:33.520 D/OmxVideoDecoder( 3337): osd close ANWBufferInMetadat
+05-30 16:18:33.520 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.storeMetaDataInBuffers"
+05-30 16:18:33.520 D/OmxVideoDecoder( 3337): setParameter 1185 0x7f000002
+05-30 16:18:33.520 D/OmxVideoDecoder( 3337): setParameter 1726 OMX_IndexAndroidStoreMetadataInBuffers__1
+05-30 16:18:33.520 E/OMXNodeInstance( 3337): setParameter(0xa743b3ec:amlogic.hevc.decoder.awesome, OMX.google.android.index.storeMetaDataInBuffers(0x7f000002): Output:1 en=1 type=1) ERROR: BadPortIndex(0x8000101b)
+05-30 16:18:33.520 E/ACodec  ( 4633): [OMX.amlogic.hevc.decoder.awesome] setPortMode on output to DynamicANWBuffer failed w/ err -2147483648
+05-30 16:18:33.521 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.prepareForAdaptivePlayback"
+05-30 16:18:33.521 D/OmxVideoDecoder( 3337): setParameter 1185 0x7f000004
+05-30 16:18:33.521 D/OmxVideoDecoder( 3337): setParameter 1758 OMX_IndexAndroidPrepareForAdaptivePlayback
+05-30 16:18:33.521 D/OmxVideoDecoder( 3337): AdaptivePlayback: max resolution is 1920 * 1080
+05-30 16:18:33.522 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.allocateNativeHandle"
+05-30 16:18:33.522 D/OmxVideoDecoder( 3337): setParameter 1185 0x7f00000a
+05-30 16:18:33.522 E/OMXNodeInstance( 3337): setParameter(0xa743b3ec:amlogic.hevc.decoder.awesome, OMX.google.android.index.allocateNativeHandle(0x7f00000a): Output:1 en=0) ERROR: UnsupportedSetting(0x80001019)
+05-30 16:18:33.522 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.enableAndroidNativeBuffers"
+05-30 16:18:33.522 D/OmxVideoDecoder( 3337): setParameter 1185 0x7f000000
+05-30 16:18:33.522 V/OmxVideoDecoder( 3337): setParameter 1720 EnableNativeBuffers 1
+05-30 16:18:33.522 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.522 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:640,h:480..
+05-30 16:18:33.522 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=640,portDef.format.video.nFrameHeight=480
+05-30 16:18:33.522 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.storeANWBufferInMetadata"
+05-30 16:18:33.522 D/OmxVideoDecoder( 3337): setParameter 1185 0x7f00000d
+05-30 16:18:33.522 D/OmxVideoDecoder( 3337): setParameter 1740 OMX_GoogleAndroidStoreANWBufferInMetadata
+05-30 16:18:33.522 D/OmxVideoDecoder( 3337): osd close ANWBufferInMetadat
+05-30 16:18:33.522 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.storeMetaDataInBuffers"
+05-30 16:18:33.522 D/OmxVideoDecoder( 3337): setParameter 1185 0x7f000002
+05-30 16:18:33.522 D/OmxVideoDecoder( 3337): setParameter 1726 OMX_IndexAndroidStoreMetadataInBuffers__1
+05-30 16:18:33.522 E/OMXNodeInstance( 3337): setParameter(0xa743b3ec:amlogic.hevc.decoder.awesome, OMX.google.android.index.storeMetaDataInBuffers(0x7f000002): Output:1 en=0 type=1) ERROR: BadPortIndex(0x8000101b)
+05-30 16:18:33.522 D/OmxVideoDecoder( 3337): setParameter 1185 0x6000001
+05-30 16:18:33.522 D/OmxVideoDecoder( 3337): setParameter nPortIndex 0 CompFmt 0xb ColorFmt 0
+05-30 16:18:33.523 D/OmxVideoDecoder( 3337): setParameter 1185 0x6000001
+05-30 16:18:33.523 D/OmxVideoDecoder( 3337): setParameter nPortIndex 1 CompFmt 0 ColorFmt 0x11
+05-30 16:18:33.523 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 640, height 480 nBufferCountMin:3
+05-30 16:18:33.524 D/OmxVideoDecoder( 3337): setParameter 1185 0x2000001
+05-30 16:18:33.524 D/OmxVideoDecoder( 3337): setParameter nPortIndex 0 nFrameWidth 1920 nFrameHeight 1080 nSliceHeight 16
+05-30 16:18:33.524 E/OmxVideoDecoder( 3337):  reset input buffer:2073600
+05-30 16:18:33.524 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.524 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:640,h:480..
+05-30 16:18:33.524 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=640,portDef.format.video.nFrameHeight=480
+05-30 16:18:33.524 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 640, height 480 nBufferCountMin:4
+05-30 16:18:33.525 D/OmxVideoDecoder( 3337): setParameter 1185 0x2000001
+05-30 16:18:33.525 D/OmxVideoDecoder( 3337): media.omx.display_mode=3
+05-30 16:18:33.525 D/OmxVideoDecoder( 3337): mjpeg vc1 wmv wmv3 force display_mode=3
+05-30 16:18:33.525 D/OmxVideoDecoder( 3337): choose mVideoUsedByOmx=0, mVideoUsedByThis=0, mAmVideoUsed=0
+05-30 16:18:33.525 D/OmxVideoDecoder( 3337): mDisplayMode = DISPLAY_MODE_V4LVIDEO
+05-30 16:18:33.525 D/OmxVideoDecoder( 3337): choose mDisplayMode=3
+05-30 16:18:33.525 D/OmxVideoDecoder( 3337): update mAdaptiveMaxFrameWidth mAdaptiveMaxFrameHeight to 1920 x 1080
+05-30 16:18:33.525 D/OmxVideoDecoder( 3337): setParameter nPortIndex 1 nFrameWidth 1920 nFrameHeight 1080 nSliceHeight 1080
+05-30 16:18:33.525 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.525 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:1920,h:1080..
+05-30 16:18:33.525 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=1920,portDef.format.video.nFrameHeight=1080
+05-30 16:18:33.525 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.describeColorAspects"
+05-30 16:18:33.526 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.storeMetaDataInBuffers"
+05-30 16:18:33.526 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.storeANWBufferInMetadata"
+05-30 16:18:33.526 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.prepareForAdaptivePlayback"
+05-30 16:18:33.526 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.configureVideoTunnelMode"
+05-30 16:18:33.526 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.useAndroidNativeBuffer2"
+05-30 16:18:33.526 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.useAndroidNativeBuffer"
+05-30 16:18:33.526 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.enableAndroidNativeBuffers"
+05-30 16:18:33.526 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.allocateNativeHandle"
+05-30 16:18:33.526 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.getAndroidNativeBufferUsage"
+05-30 16:18:33.526 D/OmxVideoDecoder( 3337): setConfig 2462 0x7f00000c
+05-30 16:18:33.526 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.describeHDRStaticInfo"
+05-30 16:18:33.527 D/OmxVideoDecoder( 3337): setConfig 2462 0x7f000009
+05-30 16:18:33.527 D/OmxVideoDecoder( 3337): HDRStaticInfo: R=0 0; G=0 0; B=0 0; W=0 0; MaxDisplayLuminance:0, MinDisplayLuminance=0, mMaxContentLightLevel=0, MaxContentLightLevel=0
+05-30 16:18:33.527 D/OmxVideoDecoder( 3337): HDRStaticInfo: all parmeter is 0, set mHasHDRStaticInfo to false
+05-30 16:18:33.527 I/AmAVUtils( 4633): AmAVUtils::isAudioExtendFormat input = video/hevc
+05-30 16:18:33.527 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:3
+05-30 16:18:33.528 D/OmxVideoDecoder( 3337): setParameter 1185 0x2000001
+05-30 16:18:33.528 D/OmxVideoDecoder( 3337): setParameter nPortIndex 0 nFrameWidth 1920 nFrameHeight 1080 nSliceHeight 16
+05-30 16:18:33.528 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:3
+05-30 16:18:33.529 D/OmxVideoDecoder( 3337): setConfig 2462 0x6f800002
+05-30 16:18:33.529 V/OmxVideoDecoder( 3337): setConfig 2626 nIndex 0x6f800002
+05-30 16:18:33.529 D/OmxComponent( 3337): setConfig 1216
+05-30 16:18:33.529 E/OMXNodeInstance( 3337): setConfig(0xa743b3ec:amlogic.hevc.decoder.awesome, ConfigPriority(0x6f800002)) ERROR: UnsupportedIndex(0x8000101a)
+05-30 16:18:33.529 I/ACodec  ( 4633): codec does not support config priority (err -1010)
+05-30 16:18:33.532 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:3
+05-30 16:18:33.533 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.533 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=0 (4k-osd)
+05-30 16:18:33.533 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.534 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=1 (unstable-pts)
+05-30 16:18:33.534 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.534 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=2 (is-mvc)
+05-30 16:18:33.534 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.534 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=3 (is-flv)
+05-30 16:18:33.535 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.535 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=4 (dvconfig-box)
+05-30 16:18:33.535 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.535 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=5 (profile-level)
+05-30 16:18:33.536 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.536 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=5 (profile-level)
+05-30 16:18:33.536 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.536 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=6 (nrdp)
+05-30 16:18:33.537 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.537 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=7 (low-latency)
+05-30 16:18:33.537 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.537 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=8 (save-mem)
+05-30 16:18:33.537 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.537 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=9 (videoLayer)
+05-30 16:18:33.538 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.538 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=10 (renderByOmx)
+05-30 16:18:33.538 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.538 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=11 (VideoQos)
+05-30 16:18:33.539 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.539 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=12 (rotation-angle)
+05-30 16:18:33.539 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.539 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=13 (McodecReport)
+05-30 16:18:33.539 D/OmxVideoDecoder( 3337): mMcodecReport=0 mPeer.get=-1488494592
+05-30 16:18:33.539 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.539 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=14 (START.low-latency)
+05-30 16:18:33.540 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.540 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.540 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:1920,h:1080..
+05-30 16:18:33.540 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=1920,portDef.format.video.nFrameHeight=1080
+05-30 16:18:33.540 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:4
+05-30 16:18:33.541 D/OmxVideoDecoder( 3337): getConfig 2316 0x700000f
+05-30 16:18:33.541 D/OmxVideoDecoder( 3337): getConfig 2319 nIndex 0x700000f
+05-30 16:18:33.541 D/OmxVideoDecoder( 3337): getConfig OMX_IndexConfigCommonOutputCrop pRect->nWidth=1920, pRect->nHeight=1080
+05-30 16:18:33.541 D/OmxVideoDecoder( 3337): setConfig 2462 0x7f00000c
+05-30 16:18:33.541 D/OmxVideoDecoder( 3337): getConfig 2316 0x7f00000c
+05-30 16:18:33.542 D/OmxVideoDecoder( 3337): getConfig 2316 0x7f00000c
+05-30 16:18:33.542 E/OMXNodeInstance( 3337): getConfig(0xa743b3ec:amlogic.hevc.decoder.awesome, ??(0x7f00000c)) ERROR: UnsupportedSetting(0x80001019)
+05-30 16:18:33.542 D/OmxVideoDecoder( 3337): getConfig 2316 0x7f000009
+05-30 16:18:33.543 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.543 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=0 (4k-osd)
+05-30 16:18:33.544 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.544 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=1 (unstable-pts)
+05-30 16:18:33.544 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.544 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=2 (is-mvc)
+05-30 16:18:33.544 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.544 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=3 (is-flv)
+05-30 16:18:33.545 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.545 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=4 (dvconfig-box)
+05-30 16:18:33.545 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.545 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=5 (profile-level)
+05-30 16:18:33.546 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.546 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=5 (profile-level)
+05-30 16:18:33.546 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.546 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=6 (nrdp)
+05-30 16:18:33.546 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.546 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=7 (low-latency)
+05-30 16:18:33.546 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.547 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=8 (save-mem)
+05-30 16:18:33.547 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.547 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=9 (videoLayer)
+05-30 16:18:33.547 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.547 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=10 (renderByOmx)
+05-30 16:18:33.548 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.548 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=11 (VideoQos)
+05-30 16:18:33.548 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.548 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=12 (rotation-angle)
+05-30 16:18:33.549 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.549 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=13 (McodecReport)
+05-30 16:18:33.549 D/OmxVideoDecoder( 3337): mMcodecReport=0 mPeer.get=-1488494592
+05-30 16:18:33.549 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.549 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=14 (START.low-latency)
+05-30 16:18:33.550 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.568 I/OmxComponent( 3337): OMX_CommandStateSet 840 Cmd 0 nParam1 0x2
+05-30 16:18:33.568 I/OmxComponent( 3337): OMX-18 STATE_SET:   OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.568 I/OmxComponent( 3337): OMX-18 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.568 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:3
+05-30 16:18:33.572 W/AshmemAllocator( 3232): ashmem_create_region(2097152) returning hidl_memory(0xb0416170, 2097152)
+05-30 16:18:33.582 I/OmxComponent( 3337): OMX-18 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.583 W/AshmemAllocator( 3232): ashmem_create_region(2097152) returning hidl_memory(0xb0416170, 2097152)
+05-30 16:18:33.584 I/OmxComponent( 3337): OMX-18 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.584 W/AshmemAllocator( 3232): ashmem_create_region(2097152) returning hidl_memory(0xb0416170, 2097152)
+05-30 16:18:33.585 I/OmxComponent( 3337): OMX-18 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.586 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.586 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:1920,h:1080..
+05-30 16:18:33.586 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=1920,portDef.format.video.nFrameHeight=1080
+05-30 16:18:33.586 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:4
+05-30 16:18:33.586 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.586 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:1920,h:1080..
+05-30 16:18:33.586 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=1920,portDef.format.video.nFrameHeight=1080
+05-30 16:18:33.586 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:4
+05-30 16:18:33.587 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.AndroidNativeBufferConsumerUsage"
+05-30 16:18:33.588 D/OmxVideoDecoder( 3337): setParameter 1185 0x7f00000b
+05-30 16:18:33.588 D/OmxVideoDecoder( 3337): OMX_GoogleAndroidIndexAndroidNativeBufferConsumerUsage 0x900
+05-30 16:18:33.588 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.getAndroidNativeBufferUsage"
+05-30 16:18:33.588 D/OmxVideoDecoder( 3337): Get NativeBufferUsage 0x400033
+05-30 16:18:33.588 D/SurfaceUtils( 4633): disconnecting from surface 0x9033f808, reason setNativeWindowSizeFormatAndUsage
+05-30 16:18:33.589 D/SurfaceUtils( 4633): connecting to surface 0x9033f808, reason setNativeWindowSizeFormatAndUsage
+05-30 16:18:33.589 D/SurfaceUtils( 4633): set up nativeWindow 0x9033f808 for 1920x1080, color 0x11, rotation 0, usage 0x402933
+05-30 16:18:33.590 D/OmxVideoDecoder( 3337): setParameter 1185 0x2000001
+05-30 16:18:33.590 D/OmxVideoDecoder( 3337): media.omx.display_mode=3
+05-30 16:18:33.590 D/OmxVideoDecoder( 3337): mjpeg vc1 wmv wmv3 force display_mode=3
+05-30 16:18:33.590 D/OmxVideoDecoder( 3337): choose mVideoUsedByOmx=0, mVideoUsedByThis=0, mAmVideoUsed=0
+05-30 16:18:33.590 D/OmxVideoDecoder( 3337): mDisplayMode = DISPLAY_MODE_V4LVIDEO
+05-30 16:18:33.590 D/OmxVideoDecoder( 3337): choose mDisplayMode=3
+05-30 16:18:33.590 D/OmxVideoDecoder( 3337): update mAdaptiveMaxFrameWidth mAdaptiveMaxFrameHeight to 1920 x 1080
+05-30 16:18:33.590 D/OmxVideoDecoder( 3337): setParameter nPortIndex 1 nFrameWidth 1920 nFrameHeight 1080 nSliceHeight 1080
+05-30 16:18:33.590 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.590 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:1920,h:1080..
+05-30 16:18:33.590 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=1920,portDef.format.video.nFrameHeight=1080
+05-30 16:18:33.591 W/        ( 3255): buffer descriptor with invalid usage bits 0x2000
+05-30 16:18:33.591 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:33.591 I/gralloc ( 3242): heap_type: 0x0, usage: 0x402966, ion_flags: 0x3
+05-30 16:18:33.591 D/gralloc ( 3242): open uvm device: 9.
+05-30 16:18:33.591 D/gralloc ( 3242): ioctl UMM_IOC_ALLOC fd: 10, 8.
+05-30 16:18:33.592 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:33.592 E/gralloc ( 3242): ioctl UMM_IOC_FREE success: 10.
+05-30 16:18:33.605 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.useAndroidNativeBuffer2"
+05-30 16:18:33.605 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.605 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:1920,h:1080..
+05-30 16:18:33.605 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=1920,portDef.format.video.nFrameHeight=1080
+05-30 16:18:33.605 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:4
+05-30 16:18:33.605 I/OmxComponent( 3337): OMX-18 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.605 W/        ( 3255): buffer descriptor with invalid usage bits 0x2000
+05-30 16:18:33.606 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:33.606 I/gralloc ( 3242): heap_type: 0x0, usage: 0x402966, ion_flags: 0x3
+05-30 16:18:33.606 D/gralloc ( 3242): ioctl UMM_IOC_ALLOC fd: 10, 8.
+05-30 16:18:33.606 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:33.606 E/gralloc ( 3242): ioctl UMM_IOC_FREE success: 10.
+05-30 16:18:33.611 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.useAndroidNativeBuffer2"
+05-30 16:18:33.611 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.611 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:1920,h:1080..
+05-30 16:18:33.611 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=1920,portDef.format.video.nFrameHeight=1080
+05-30 16:18:33.611 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:4
+05-30 16:18:33.611 I/OmxComponent( 3337): OMX-18 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.611 W/        ( 3255): buffer descriptor with invalid usage bits 0x2000
+05-30 16:18:33.612 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:33.612 I/gralloc ( 3242): heap_type: 0x0, usage: 0x402966, ion_flags: 0x3
+05-30 16:18:33.612 D/gralloc ( 3242): ioctl UMM_IOC_ALLOC fd: 10, 8.
+05-30 16:18:33.612 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:33.612 E/gralloc ( 3242): ioctl UMM_IOC_FREE success: 10.
+05-30 16:18:33.616 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.useAndroidNativeBuffer2"
+05-30 16:18:33.617 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.617 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:1920,h:1080..
+05-30 16:18:33.617 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=1920,portDef.format.video.nFrameHeight=1080
+05-30 16:18:33.617 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:4
+05-30 16:18:33.617 I/OmxComponent( 3337): OMX-18 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.617 W/        ( 3255): buffer descriptor with invalid usage bits 0x2000
+05-30 16:18:33.617 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:33.617 I/gralloc ( 3242): heap_type: 0x0, usage: 0x402966, ion_flags: 0x3
+05-30 16:18:33.617 D/gralloc ( 3242): ioctl UMM_IOC_ALLOC fd: 10, 8.
+05-30 16:18:33.618 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:33.618 E/gralloc ( 3242): ioctl UMM_IOC_FREE success: 10.
+05-30 16:18:33.622 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.useAndroidNativeBuffer2"
+05-30 16:18:33.623 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.623 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:1920,h:1080..
+05-30 16:18:33.623 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=1920,portDef.format.video.nFrameHeight=1080
+05-30 16:18:33.623 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:4
+05-30 16:18:33.623 I/OmxComponent( 3337): OMX-18 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.624 W/        ( 3255): buffer descriptor with invalid usage bits 0x2000
+05-30 16:18:33.624 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:33.624 I/gralloc ( 3242): heap_type: 0x0, usage: 0x402966, ion_flags: 0x3
+05-30 16:18:33.624 D/gralloc ( 3242): ioctl UMM_IOC_ALLOC fd: 10, 8.
+05-30 16:18:33.625 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:33.625 E/gralloc ( 3242): ioctl UMM_IOC_FREE success: 10.
+05-30 16:18:33.628 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.useAndroidNativeBuffer2"
+05-30 16:18:33.629 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.629 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:1920,h:1080..
+05-30 16:18:33.629 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=1920,portDef.format.video.nFrameHeight=1080
+05-30 16:18:33.629 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:4
+05-30 16:18:33.629 I/OmxComponent( 3337): OMX-18 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.629 W/        ( 3255): buffer descriptor with invalid usage bits 0x2000
+05-30 16:18:33.629 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:33.629 I/gralloc ( 3242): heap_type: 0x0, usage: 0x402966, ion_flags: 0x3
+05-30 16:18:33.629 D/gralloc ( 3242): ioctl UMM_IOC_ALLOC fd: 10, 8.
+05-30 16:18:33.630 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:33.630 E/gralloc ( 3242): ioctl UMM_IOC_FREE success: 10.
+05-30 16:18:33.635 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.useAndroidNativeBuffer2"
+05-30 16:18:33.635 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.635 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:1920,h:1080..
+05-30 16:18:33.635 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=1920,portDef.format.video.nFrameHeight=1080
+05-30 16:18:33.635 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:4
+05-30 16:18:33.635 I/OmxComponent( 3337): OMX-18 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.636 W/        ( 3255): buffer descriptor with invalid usage bits 0x2000
+05-30 16:18:33.636 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:33.636 I/gralloc ( 3242): heap_type: 0x0, usage: 0x402966, ion_flags: 0x3
+05-30 16:18:33.636 D/gralloc ( 3242): ioctl UMM_IOC_ALLOC fd: 10, 8.
+05-30 16:18:33.637 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:33.637 E/gralloc ( 3242): ioctl UMM_IOC_FREE success: 10.
+05-30 16:18:33.641 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.useAndroidNativeBuffer2"
+05-30 16:18:33.641 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.641 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:1920,h:1080..
+05-30 16:18:33.641 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=1920,portDef.format.video.nFrameHeight=1080
+05-30 16:18:33.641 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:4
+05-30 16:18:33.641 I/OmxComponent( 3337): OMX-18 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.642 W/        ( 3255): buffer descriptor with invalid usage bits 0x2000
+05-30 16:18:33.642 I/gralloc ( 3242): framebuffer hal alread move to hwcomposer
+05-30 16:18:33.642 I/gralloc ( 3242): heap_type: 0x0, usage: 0x402966, ion_flags: 0x3
+05-30 16:18:33.642 D/gralloc ( 3242): ioctl UMM_IOC_ALLOC fd: 10, 8.
+05-30 16:18:33.643 E/gralloc ( 3242): am gralloc extend attr free 8.
+05-30 16:18:33.643 E/gralloc ( 3242): ioctl UMM_IOC_FREE success: 10.
+05-30 16:18:33.647 D/OmxComponent( 3337): getExtensionIndex 1223 name="OMX.google.android.index.useAndroidNativeBuffer2"
+05-30 16:18:33.647 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.647 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:1920,h:1080..
+05-30 16:18:33.647 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=1920,portDef.format.video.nFrameHeight=1080
+05-30 16:18:33.647 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:4
+05-30 16:18:33.647 I/OmxComponent( 3337): OMX-18 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.648 V/AmlogicVideoDecoderAwesome( 3337): acquireResources:387 >
+05-30 16:18:33.648 D/AmlogicVideoDecoderAwesome( 3337): setUp mVideoDisplay =0, mDisplayMode=3
+05-30 16:18:33.648 D/AmlogicVideoDecoderAwesome( 3337): mMaxFrameWidth 1920, mMaxFrameHeight 1080
+05-30 16:18:33.648 V/AmlogicVideoDecoderAwesome( 3337): enable osd or video ...3
+05-30 16:18:33.648 V/AmlogicVideoDecoderAwesome( 3337): media.omx.buffermargin is not set used def=0
+05-30 16:18:33.648 D/AmlogicVideoDecoderAwesome( 3337): mDoubleWriteMode 16
+05-30 16:18:33.648 V/debugSetup( 3337): media.omx.dumpRecv is disabled
+05-30 16:18:33.648 V/debugSetup( 3337): media.omx.dumpCodec is disabled
+05-30 16:18:33.648 E/AmlogicVideoDecoderAwesome( 3337): setUp(): 1618 mOwner->isGameMode()=0
+05-30 16:18:33.648 V/AmlogicVideoDecoderAwesome( 3337): media.omx.gamemode is not set used def=0
+05-30 16:18:33.648 V/AmlogicVideoDecoderAwesome( 3337): *Input Frame Rate is 0..
+05-30 16:18:33.648 V/AmlogicVideoDecoderAwesome( 3337): videoDefine.xFramerate:0  
+05-30 16:18:33.648 V/AmlogicVideoDecoderAwesome( 3337): mVideoType:11
+05-30 16:18:33.648 D/AmlogicVideoDecoderAwesome( 3337): decoder_type = 1
+05-30 16:18:33.648 V/AmlogicVideoDecoderAwesome( 3337): set FRAME_BASE_USE_VFM_PATH =9
+05-30 16:18:33.648 D/AmlogicVideoDecoderAwesome( 3337): AmlogicVideoDecoder::setUp, mUseFrameMode 1, video_path 9
+05-30 16:18:33.649 D/AmlogicVideoDecoderAwesome( 3337): alloc v4lvideo device instance ID:0
+05-30 16:18:33.649 D/AmlogicVideoDecoderAwesome( 3337): mAmlCodecParam->config=hevc_buf_width:1920;hevc_buf_height:1088;hevc_buf_margin:0;hevc_double_write_mode:16;save_buffer_mode:0;
+05-30 16:18:33.649 D/AmlogicVideoDecoderAwesome( 3337): mAmlCodecParam->config_len=105
+05-30 16:18:33.649 D/AmlogicVideoDecoderAwesome( 3337): codecInit
+05-30 16:18:33.649 I/amcodec ( 3337): codec_init amstream version : 2.0
+05-30 16:18:33.666 D/AmlogicVideoDecoderAwesome( 3337): codecInit done
+05-30 16:18:33.667 D/AmlogicVideoDecoderAwesome( 3337): media.omx.videopeek 0
+05-30 16:18:33.667 I/AmlogicVideoDecoderAwesome( 3337): video layer sync version is 0
+05-30 16:18:33.672 I/amtsync ( 3337): open /dev/tsync fd=-1
+05-30 16:18:33.672 I/amtsync ( 3337): tsync_set_tunnel_mode need to open tsync first!
+05-30 16:18:33.672 I/amtsync ( 3337): set tunnel mode 0
+05-30 16:18:33.672 V/AmlogicVideoDecoderAwesome( 3337): mFlvFlag=0
+05-30 16:18:33.672 V/AmlogicVideoDecoderAwesome( 3337): mOutBufferCount =8
+05-30 16:18:33.672 V/AmlogicVideoDecoderAwesome( 3337): mIsNativeBuffers =1
+05-30 16:18:33.672 D/AmlogicVideoDecoderAwesome( 3337): mIsDMABuffers: false
+05-30 16:18:33.672 D/AmlogicVideoDecoderAwesome( 3337): mAmvideoDev->use_frame_mode=0
+05-30 16:18:33.672 D/AmlogicVideoDecoderAwesome( 3337): mAmvideoDev->use_frame_mode=1, mUseFrameMode=1
+05-30 16:18:33.672 I/amvdec  ( 3337): amvideo_init ret=0
+05-30 16:18:33.672 D/AmlogicVideoDecoderAwesome( 3337): output buffer:mWidth:1920, mHeight:1080, mVideoDevId:0
+05-30 16:18:33.672 I/OmxComponent( 3337): STATE_DONE:  OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.673 I/OmxComponent( 3337): OMX_CommandStateSet 840 Cmd 0 nParam1 0x3
+05-30 16:18:33.673 I/OmxComponent( 3337): OMX-18 STATE_SET:   OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.673 V/AmlogicVideoDecoderAwesome( 3337): prepare:306 >
+05-30 16:18:33.673 D/AmlogicVideoDecoderAwesome( 3337): mVideo mDisplayTread start
+05-30 16:18:33.673 D/AmlogicVideoDecoderAwesome( 3337): mDTaskStatus=0
+05-30 16:18:33.673 V/AmlogicVideoDecoderAwesome( 3337): start:319 >
+05-30 16:18:33.674 D/AmlogicVideoDecoderAwesome( 3337): mVideo start
+05-30 16:18:33.674 I/OmxComponent( 3337): OMX-18 STATE_TRANS: OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.674 I/OmxComponent( 3337): STATE_DONE:  OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.hevc.decoder.awesome
+05-30 16:18:33.674 V/OMX_WorkerPeer( 3337): hardware/amlogic/omx.qiya/omx_framework/WorkerPeer.cpp:runWorkerStatic:155 --------------------
+05-30 16:18:33.674 V/OMX_WorkerPeer( 3337): hardware/amlogic/omx.qiya/omx_framework/WorkerPeer.cpp:runWorker:161 --------------------
+05-30 16:18:33.676 V/AmlogicVideoDecoderAwesome( 3337): doCodecSpec csd_len=98
+05-30 16:18:33.676 E/AmlogicVideoDecoderAwesome( 3337): SPS: Main profile bitstream
+05-30 16:18:33.677 E/AmlogicVideoDecoderAwesome( 3337): SPS: bit_depth=8,8
+05-30 16:18:33.677 V/AmlogicVideoDecoderAwesome( 3337): hevc csd size = 99, [1920:1088],bitdepth=8
+05-30 16:18:33.679 I/OMXClient( 4633): IOmx service obtained
+05-30 16:18:33.679 I/OMXMaster( 3337): makeComponentInstance(OMX.google.aac.decoder) in omx@1.0-service process
+05-30 16:18:33.683 I/AmAVUtils( 4633): AmAVUtils::getComponentRole isEncoder :0 mime:audio/mp4a-latm 
+05-30 16:18:33.683 V/AVUtils ( 4633): AVUtils::getComponentRole
+05-30 16:18:33.685 I/AmAVUtils( 4633): AmAVUtils::isAudioExtendFormat input = audio/mp4a-latm
+05-30 16:18:33.685 E/OMXNodeInstance( 3337): setConfig(0xa741cc60:google.aac.decoder, ConfigPriority(0x6f800002)) ERROR: Undefined(0x80001001)
+05-30 16:18:33.685 I/ACodec  ( 4633): codec does not support config priority (err -2147483648)
+05-30 16:18:33.685 E/OMXNodeInstance( 3337): getConfig(0xa741cc60:google.aac.decoder, ConfigAndroidVendorExtension(0x6f100004)) ERROR: Undefined(0x80001001)
+05-30 16:18:33.690 W/AshmemAllocator( 3232): ashmem_create_region(8192) returning hidl_memory(0xb0416170, 8192)
+05-30 16:18:33.692 I/chatty  ( 3232): uid=1000(system) allocator@1.0-s identical 2 lines
+05-30 16:18:33.693 W/AshmemAllocator( 3232): ashmem_create_region(8192) returning hidl_memory(0xb0416170, 8192)
+05-30 16:18:33.697 W/AshmemAllocator( 3232): ashmem_create_region(32768) returning hidl_memory(0xb0416170, 32768)
+05-30 16:18:33.699 I/chatty  ( 3232): uid=1000(system) allocator@1.0-s identical 2 lines
+05-30 16:18:33.701 W/AshmemAllocator( 3232): ashmem_create_region(32768) returning hidl_memory(0xb0416170, 32768)
+05-30 16:18:33.710 I/SoftAAC2( 3337): Reconfiguring decoder: 0->32000 Hz, 0->2 channels
+05-30 16:18:33.722 W/AshmemAllocator( 3232): ashmem_create_region(32768) returning hidl_memory(0xb0416170, 32768)
+05-30 16:18:33.725 I/chatty  ( 3232): uid=1000(system) allocator@1.0-s identical 2 lines
+05-30 16:18:33.726 W/AshmemAllocator( 3232): ashmem_create_region(32768) returning hidl_memory(0xb0416170, 32768)
+05-30 16:18:33.741 V/AmlogicVideoDecoderAwesome( 3337): head is 001, add start code
+05-30 16:18:33.779 D/AmlogicVideoDecoderAwesome( 3337): =11, =1920, =1080, =1920, =1080, =1000060000000, =1000060040000, =1000060080000, =142336, =5265, =17531
+05-30 16:18:33.827 D/AmlogicVideoDecoderAwesome( 3337): mFirstInputTime = 140537, mFirstOutputTime=140624, delay= 87ms
+05-30 16:18:33.828 V/OmxVideoDecoder( 3337): updatePort mUseNativeBuffers 1
+05-30 16:18:33.828 D/AmlogicVideoDecoderAwesome( 3337): get native buffer info NV:w:1920,h:1080..
+05-30 16:18:33.828 V/OmxVideoDecoder( 3337): updatePort:portDef.format.video.nFrameWidth=1920,portDef.format.video.nFrameHeight=1080
+05-30 16:18:33.828 I/OmxVideoDecoder( 3337): getParameter Component Name OMX.amlogic.hevc.decoder.awesome, width 1920, height 1080 nBufferCountMin:4
+05-30 16:18:33.828 D/OmxVideoDecoder( 3337): getConfig 2316 0x700000f
+05-30 16:18:33.828 D/OmxVideoDecoder( 3337): getConfig 2319 nIndex 0x700000f
+05-30 16:18:33.828 D/OmxVideoDecoder( 3337): getConfig OMX_IndexConfigCommonOutputCrop pRect->nWidth=1920, pRect->nHeight=1080
+05-30 16:18:33.829 D/OmxVideoDecoder( 3337): setConfig 2462 0x7f00000c
+05-30 16:18:33.829 I/om.tivimatelit( 4633): Background concurrent copying GC freed 3119(215KB) AllocSpace objects, 0(0B) LOS objects, 24% free, 4MB/5MB, paused 110us total 107.377ms
+05-30 16:18:33.829 D/OmxVideoDecoder( 3337): getConfig 2316 0x7f00000c
+05-30 16:18:33.830 D/OmxVideoDecoder( 3337): getConfig 2316 0x7f00000c
+05-30 16:18:33.830 E/OMXNodeInstance( 3337): getConfig(0xa743b3ec:amlogic.hevc.decoder.awesome, ??(0x7f00000c)) ERROR: UnsupportedSetting(0x80001019)
+05-30 16:18:33.831 D/OmxVideoDecoder( 3337): getConfig 2316 0x7f000009
+05-30 16:18:33.833 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.833 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=0 (4k-osd)
+05-30 16:18:33.834 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.834 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=1 (unstable-pts)
+05-30 16:18:33.835 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.835 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=2 (is-mvc)
+05-30 16:18:33.836 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.836 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=3 (is-flv)
+05-30 16:18:33.837 W/AudioFlinger( 3039): createTrack_l(): mismatch between requested flags (00000008) and output flags (00000002)
+05-30 16:18:33.838 D/AudioFlinger( 3039): Client defaulted notificationFrames to 21333 for frameCount 64000
+05-30 16:18:33.839 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.840 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=4 (dvconfig-box)
+05-30 16:18:33.841 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.841 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=5 (profile-level)
+05-30 16:18:33.843 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.843 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=5 (profile-level)
+05-30 16:18:33.844 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.844 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=6 (nrdp)
+05-30 16:18:33.844 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.844 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=7 (low-latency)
+05-30 16:18:33.845 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.845 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=8 (save-mem)
+05-30 16:18:33.846 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.846 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=9 (videoLayer)
+05-30 16:18:33.846 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.846 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=10 (renderByOmx)
+05-30 16:18:33.847 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.847 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=11 (VideoQos)
+05-30 16:18:33.851 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.851 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=12 (rotation-angle)
+05-30 16:18:33.851 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.851 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=13 (McodecReport)
+05-30 16:18:33.852 D/OmxVideoDecoder( 3337): mMcodecReport=0 mPeer.get=-1488494592
+05-30 16:18:33.852 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.852 V/OmxVideoDecoder( 3337): VendorExt: getConfig: index=14 (START.low-latency)
+05-30 16:18:33.853 D/OmxVideoDecoder( 3337): getConfig 2316 0x6f100004
+05-30 16:18:33.953 E/MesonDisplay( 3243): No VideoRectChange callback registered.
+05-30 16:18:33.968 D/SystemControl( 3231): [CPQControl]:onVframeSizeChange: event value = 21(0x15)!
+05-30 16:18:33.968 D/SystemControl( 3231): [CPQControl]:onVframeSizeChange: frameszieEventFlag = 1,hdrTypeEventFlag = 0,videoPlayStartEventFlag = 1,videoPlayStopEventFlag = 0,videoPlayAxisEventFlag = 1!
+05-30 16:18:33.968 D/SystemControl( 3231): [CPQControl]:isBootvideoStopped: bootvideo enable value is 0050!
+05-30 16:18:33.968 D/SystemControl( 3231): [CPQControl]:isBootvideoStopped: bootvideo don't enable!
+05-30 16:18:33.969 D/SystemControl( 3231): [CPQControl]:onVframeSizeChange: sig_fmt = 0x40a(1034).
+05-30 16:18:33.969 D/SystemControl( 3231): [CPQControl]:SetCurrentSourceInputInfo: param_check_source_enable = 1!
+05-30 16:18:33.969 D/SystemControl( 3231): [CPQControl]:GetHDRMode: mode is 32
+05-30 16:18:33.969 D/SystemControl( 3231): [CPQControl]:SetCurrentSourceInputInfo: hdr status is 0!
+05-30 16:18:33.970 D/SystemControl( 3231): [CPQControl]:CheckOutPutMode: current output mode is 576cvbs!
+05-30 16:18:33.970 D/SystemControl( 3231): [CPQControl]:CheckOutPutMode: output mode is 0!
+05-30 16:18:33.970 D/SystemControl( 3231): [CPQControl]:SetCurrentSourceInputInfo, mCurrentDemoSquitoLevel: 0, squito_level: 0
+05-30 16:18:33.970 D/SystemControl( 3231): [CPQControl]:SetCurrentSourceInputInfo: same signal, no need set!
+05-30 16:18:34.099 I/audio_hw_subMixingFactory( 3189): ++usecase_change_validate_l_sm: dev usecase masks = 0, out usecase_masks = 0, out usecase STREAM_PCM_NORMAL
+05-30 16:18:34.099 I/audio_hw_subMixingFactory( 3189): ++++usecase_change_validate_l_sm(),continuous_audio_mode 0 dev usecase masks = 0, out usecase_masks = 0, out usecase STREAM_PCM_NORMAL
+05-30 16:18:34.099 I/audio_hw_subMixingFactory( 3189): usecase_change_validate_l_sm(), mixer_aux_buffer_write_sm !
+05-30 16:18:34.099 I/audio_hw_subMixingFactory( 3189): ----usecase_change_validate_l_sm(), continuous_audio_mode 0 dev usecase masks = 0x1, out usecase_masks = 0x1, out usecase STREAM_PCM_NORMAL
+05-30 16:18:34.099 I/audio_hw_port( 3189): get_input_port_index(), samplerate 48000
+05-30 16:18:34.099 D/audio_hw_port( 3189): new_input_port(), index:0, rbuf size:8192, direct_on:0
+05-30 16:18:34.099 D/audio_hw_port( 3189): new_input_port(), fmt 0x1, rate 48000
+05-30 16:18:34.100 I/amlaudioMixer( 3189): ++init_mixer_input_port port index 0, size 512 frames
+05-30 16:18:34.100 I/amlaudioMixer( 3189): init_mixer_input_port(), port->initial_frames: 0
+05-30 16:18:34.100 I/audio_hw_port( 3189): get_input_port_index(), samplerate 48000
+05-30 16:18:34.100 I/audio_hw_subMixingFactory( 3189): mixer_aux_buffer_write_sm(), primary 0xa30cf000 port index = 0
+05-30 16:18:34.100 I/audio_hw_subMixingFactory( 3189): padding_bytes 16384
+05-30 16:18:34.100 I/amlaudioMixer( 3189): port index 0 is active now
+05-30 16:18:34.100 I/audio_hw_subMixingFactory( 3189): padding_bytes 14336
+05-30 16:18:34.101 I/amlaudioMixer( 3189): [mixer_thread_sleep:421] the thread is awakened
+05-30 16:18:34.101 I/amlaudioMixer( 3189): ++mixer_output_startup start open
+05-30 16:18:34.101 I/audio_hw_port( 3189): output_port_start(), open ALSA hw:1,0
+05-30 16:18:34.101 I/audio_hw_subMixingFactory( 3189): padding_bytes 12288
+05-30 16:18:34.101 I/audio_hw_subMixingFactory( 3189): padding_bytes 10240
+05-30 16:18:34.101 I/audio_hw_subMixingFactory( 3189): padding_bytes 8192
+05-30 16:18:34.101 I/audio_hw_subMixingFactory( 3189): padding_bytes 6144
+05-30 16:18:34.112 I/audio_hw_subMixingFactory( 3189): padding_bytes 4096
+05-30 16:18:34.112 I/audio_hw_subMixingFactory( 3189): padding_bytes 2048

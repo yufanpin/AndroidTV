@@ -703,7 +703,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
-        private const val HEARTBEAT_INTERVAL_MS = 60000L
+        private const val HEARTBEAT_INTERVAL_MS = 10000L
         private const val BACKEND_INFO_AUTO_HIDE_MS = 4000L
         private const val BUFFERING_FAILOVER_MS = 20000L
         private const val CHANNEL_ZAP_DEBOUNCE_MS = 300L

@@ -60,7 +60,10 @@ object FileLogStore {
             if (file.exists() && file.length() > MAX_SIZE) {
                 file.delete()
             }
-            file.appendText(line)
+            java.io.FileOutputStream(file, true).use { fos ->
+                fos.write(line.toByteArray())
+                fos.flush()
+            }
         } catch (_: Exception) {
         }
     }
