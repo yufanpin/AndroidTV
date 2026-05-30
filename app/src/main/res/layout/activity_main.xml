@@ -1,12 +1,38 @@
-<androidx.media3.ui.PlayerView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/playerView"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000"
-    android:focusable="true"
-    android:focusableInTouchMode="true"
-    app:resize_mode="fit"
-    app:show_buffering="never"
-    app:surface_type="surface_view"
-    app:use_controller="false" />
+    android:background="#000000">
+
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/playerView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000000"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        app:keep_content_on_player_reset="true"
+        app:resize_mode="fit"
+        app:show_buffering="never"
+        app:shutter_background_color="@android:color/transparent"
+        app:surface_type="surface_view"
+        app:use_controller="false" />
+
+    <TextView
+        android:id="@+id/backendInfoText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="28dp"
+        android:layout_marginEnd="24dp"
+        android:background="#CC101010"
+        android:maxWidth="420dp"
+        android:paddingStart="14dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="10dp"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+</FrameLayout>

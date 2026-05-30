@@ -15,8 +15,10 @@ import com.tivimatelite.parser.M3U8Parser
 import com.tivimatelite.player.PlaybackHistoryStore
 import com.tivimatelite.player.PlayerManager
 import java.io.FileNotFoundException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
@@ -29,6 +31,7 @@ class MainActivity : AppCompatActivity() {
     private var currentChannelIndex = -1
     private var currentSourceIndex = 0
     private val attemptedSourceIndexes = HashSet<Int>(8)
+    private var backendInfoHideJob: Job? = null
 
     private val playerErrorListener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
@@ -67,6 +70,12 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_NUMPAD_ENTER,
             KeyEvent.KEYCODE_DPAD_LEFT,
             KeyEvent.KEYCODE_DPAD_RIGHT -> true
+            KeyEvent.KEYCODE_MENU,
+            KeyEvent.KEYCODE_SETTINGS,
+            KeyEvent.KEYCODE_INFO -> {
+                toggleBackendInfo()
+                true
+            }
             else -> super.dispatchKeyEvent(event)
         }
     }
@@ -79,6 +88,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         binding.playerView.player?.removeListener(playerErrorListener)
         binding.playerView.player = null
+        backendInfoHideJob?.cancel()
         scope.cancel()
         if (isFinishing) PlayerManager.release()
         super.onDestroy()
@@ -205,6 +215,35 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun toggleBackendInfo() {
+        if (binding.backendInfoText.visibility == android.view.View.VISIBLE) {
+            hideBackendInfo()
+            return
+        }
+
+        val backendUrl = BuildConfig.PLAYLIST_URL.trim()
+        val text = if (backendUrl.isEmpty()) {
+            "Backend URL: (not configured)\nSource: local assets/channels.m3u"
+        } else {
+            "Backend URL: $backendUrl"
+        }
+
+        binding.backendInfoText.text = text
+        Log.i(TAG, text.replace('\n', ' '))
+        binding.backendInfoText.visibility = android.view.View.VISIBLE
+        backendInfoHideJob?.cancel()
+        backendInfoHideJob = scope.launch {
+            delay(BACKEND_INFO_AUTO_HIDE_MS)
+            hideBackendInfo()
+        }
+    }
+
+    private fun hideBackendInfo() {
+        backendInfoHideJob?.cancel()
+        binding.backendInfoText.visibility = android.view.View.GONE
+        Log.i(TAG, "Backend info hidden")
+    }
+
     private fun playNextSourceForCurrentChannel() {
         if (currentChannelIndex !in channelGroups.indices) return
         val group = channelGroups[currentChannelIndex]
@@ -229,5 +268,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+        private const val BACKEND_INFO_AUTO_HIDE_MS = 4000L
     }
 }
