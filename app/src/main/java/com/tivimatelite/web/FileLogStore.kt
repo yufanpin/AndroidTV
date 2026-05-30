@@ -22,12 +22,14 @@ object FileLogStore {
         i(TAG, "Device: ${android.os.Build.MODEL}, SDK: ${android.os.Build.VERSION.SDK_INT}")
         i(TAG, "App version: ${context.packageManager.getPackageInfo(context.packageName, 0).versionName}")
 
+        val prevHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             e(TAG, "UNCAUGHT EXCEPTION on thread: ${thread.name}", throwable)
-            throwable.printStackTrace(java.io.PrintStream(logFile?.outputStream() ?: return@setDefaultUncaughtExceptionHandler))
-            val prev = thread.defaultUncaughtExceptionHandler
-            if (prev != null && prev !== Thread.getDefaultUncaughtExceptionHandler()) {
-                prev.uncaughtException(thread, throwable)
+            try {
+                throwable.printStackTrace(java.io.PrintStream(logFile?.outputStream() ?: return@setDefaultUncaughtExceptionHandler))
+            } catch (_: Exception) {}
+            if (prevHandler != null && prevHandler !== Thread.getDefaultUncaughtExceptionHandler()) {
+                prevHandler.uncaughtException(thread, throwable)
             }
         }
         i(TAG, "Uncaught exception handler installed")
