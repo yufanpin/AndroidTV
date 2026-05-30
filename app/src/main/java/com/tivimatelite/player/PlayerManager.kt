@@ -84,8 +84,9 @@ object PlayerManager {
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
-        val renderersFactory = DefaultRenderersFactory(context)
-            .setEnableAudioOutputPlaybackParameters(true)
+        val renderersFactory = DefaultRenderersFactory(context).also {
+            enableAudioOutputPlaybackParameters(it)
+        }
 
         return ExoPlayer.Builder(context)
             .setLoadControl(loadControl)
@@ -96,6 +97,30 @@ object PlayerManager {
                 addListener(playbackListener)
                 addAnalyticsListener(codecAnalyticsListener)
             }
+    }
+
+    private fun enableAudioOutputPlaybackParameters(renderersFactory: DefaultRenderersFactory) {
+        val factoryClass = renderersFactory.javaClass
+        val booleanType = Boolean::class.javaPrimitiveType ?: return
+        val methodNames = listOf(
+            "setEnableAudioOutputPlaybackParameters",
+            "setEnableAudioTrackPlaybackParams"
+        )
+
+        for (methodName in methodNames) {
+            val method = runCatching { factoryClass.getMethod(methodName, booleanType) }.getOrNull()
+                ?: continue
+            runCatching { method.invoke(renderersFactory, true) }
+                .onSuccess {
+                    AppLogStore.i(TAG, "Enabled audio playback params via $methodName")
+                }
+                .onFailure {
+                    AppLogStore.w(TAG, "Failed to enable audio playback params via $methodName", it)
+                }
+            return
+        }
+
+        AppLogStore.w(TAG, "Audio playback params API not available in current Media3 build")
     }
 
     private val playbackListener = object : Player.Listener {
