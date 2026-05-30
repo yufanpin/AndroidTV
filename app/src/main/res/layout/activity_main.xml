@@ -35,4 +35,22 @@
         android:textSize="13sp"
         android:visibility="gone" />
 
+    <TextView
+        android:id="@+id/channelNumberText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="24dp"
+        android:layout_marginBottom="32dp"
+        android:background="#CC101010"
+        android:minWidth="56dp"
+        android:paddingStart="14dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="8dp"
+        android:textColor="#FFFFFF"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
 </FrameLayout>

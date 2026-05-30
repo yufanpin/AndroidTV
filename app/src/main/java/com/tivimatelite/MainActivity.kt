@@ -42,6 +42,13 @@ class MainActivity : AppCompatActivity() {
     private var playlistWatchJob: Job? = null
     private var reloadChannelsJob: Job? = null
     private var readyStallWatchJob: Job? = null
+    private var switchDebounceJob: Job? = null
+    private var channelNumberHideJob: Job? = null
+    private var numericCommitJob: Job? = null
+    private var singleSourceRetryJob: Job? = null
+    private var pendingSwitchIndex: Int? = null
+    private val numericInputBuffer = StringBuilder(4)
+    private var singleSourceRetryCount = 0
     private var lastPlaylistFingerprint: String? = null
     private var activePlaylistSource = "local assets/channels.m3u"
 
@@ -61,6 +68,8 @@ class MainActivity : AppCompatActivity() {
                 }
                 Player.STATE_READY -> {
                     cancelBufferingFailover()
+                    singleSourceRetryCount = 0
+                    singleSourceRetryJob?.cancel()
                     startReadyStallWatch()
                 }
                 Player.STATE_ENDED -> {
@@ -96,11 +105,11 @@ class MainActivity : AppCompatActivity() {
 
         return when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> {
-                switchChannel(-1)
+                requestSwitchByDelta(-1)
                 true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
-                switchChannel(1)
+                requestSwitchByDelta(1)
                 true
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
@@ -120,6 +129,29 @@ class MainActivity : AppCompatActivity() {
                 toggleBackendInfo()
                 true
             }
+            KeyEvent.KEYCODE_0,
+            KeyEvent.KEYCODE_1,
+            KeyEvent.KEYCODE_2,
+            KeyEvent.KEYCODE_3,
+            KeyEvent.KEYCODE_4,
+            KeyEvent.KEYCODE_5,
+            KeyEvent.KEYCODE_6,
+            KeyEvent.KEYCODE_7,
+            KeyEvent.KEYCODE_8,
+            KeyEvent.KEYCODE_9,
+            KeyEvent.KEYCODE_NUMPAD_0,
+            KeyEvent.KEYCODE_NUMPAD_1,
+            KeyEvent.KEYCODE_NUMPAD_2,
+            KeyEvent.KEYCODE_NUMPAD_3,
+            KeyEvent.KEYCODE_NUMPAD_4,
+            KeyEvent.KEYCODE_NUMPAD_5,
+            KeyEvent.KEYCODE_NUMPAD_6,
+            KeyEvent.KEYCODE_NUMPAD_7,
+            KeyEvent.KEYCODE_NUMPAD_8,
+            KeyEvent.KEYCODE_NUMPAD_9 -> {
+                handleNumericKey(event.keyCode)
+                true
+            }
             else -> super.dispatchKeyEvent(event)
         }
     }
@@ -135,6 +167,10 @@ class MainActivity : AppCompatActivity() {
         backendInfoHideJob?.cancel()
         playlistWatchJob?.cancel()
         reloadChannelsJob?.cancel()
+        switchDebounceJob?.cancel()
+        channelNumberHideJob?.cancel()
+        numericCommitJob?.cancel()
+        singleSourceRetryJob?.cancel()
         cancelReadyStallWatch()
         cancelBufferingFailover()
         scope.cancel()
@@ -280,17 +316,76 @@ class MainActivity : AppCompatActivity() {
         currentSourceIndex = 0
     }
 
-    private fun switchChannel(delta: Int) {
+    private fun requestSwitchByDelta(delta: Int) {
         if (channelGroups.isEmpty()) return
-        if (currentChannelIndex < 0) {
-            currentChannelIndex = 0
-            currentSourceIndex = 0
-        } else {
-            val size = channelGroups.size
-            currentChannelIndex = (currentChannelIndex + delta + size) % size
-            currentSourceIndex = 0
+        val size = channelGroups.size
+        val base = pendingSwitchIndex ?: if (currentChannelIndex >= 0) currentChannelIndex else 0
+        pendingSwitchIndex = (base + delta + size) % size
+        showChannelNumberOverlay((pendingSwitchIndex!! + 1).toString())
+
+        switchDebounceJob?.cancel()
+        switchDebounceJob = scope.launch {
+            delay(CHANNEL_ZAP_DEBOUNCE_MS)
+            val target = pendingSwitchIndex ?: return@launch
+            pendingSwitchIndex = null
+            switchChannelImmediately(target)
         }
+    }
+
+    private fun switchChannelImmediately(targetIndex: Int) {
+        if (channelGroups.isEmpty()) return
+        currentChannelIndex = targetIndex.coerceIn(0, channelGroups.lastIndex)
+        currentSourceIndex = 0
+        showChannelNumberOverlay((currentChannelIndex + 1).toString())
         playCurrentSource(resetAttempts = true)
+    }
+
+    private fun handleNumericKey(keyCode: Int) {
+        val digit = keyCodeToDigit(keyCode) ?: return
+        if (numericInputBuffer.length >= 4) numericInputBuffer.clear()
+        numericInputBuffer.append(digit)
+        showChannelNumberOverlay(numericInputBuffer.toString())
+
+        numericCommitJob?.cancel()
+        numericCommitJob = scope.launch {
+            delay(NUMERIC_INPUT_COMMIT_MS)
+            val number = numericInputBuffer.toString().toIntOrNull()
+            numericInputBuffer.clear()
+            if (number == null || number <= 0 || channelGroups.isEmpty()) return@launch
+
+            val targetIndex = number - 1
+            if (targetIndex !in channelGroups.indices) {
+                AppLogStore.w(TAG, "Numeric channel out of range: $number")
+                return@launch
+            }
+            switchChannelImmediately(targetIndex)
+        }
+    }
+
+    private fun keyCodeToDigit(keyCode: Int): Int? {
+        return when (keyCode) {
+            KeyEvent.KEYCODE_0, KeyEvent.KEYCODE_NUMPAD_0 -> 0
+            KeyEvent.KEYCODE_1, KeyEvent.KEYCODE_NUMPAD_1 -> 1
+            KeyEvent.KEYCODE_2, KeyEvent.KEYCODE_NUMPAD_2 -> 2
+            KeyEvent.KEYCODE_3, KeyEvent.KEYCODE_NUMPAD_3 -> 3
+            KeyEvent.KEYCODE_4, KeyEvent.KEYCODE_NUMPAD_4 -> 4
+            KeyEvent.KEYCODE_5, KeyEvent.KEYCODE_NUMPAD_5 -> 5
+            KeyEvent.KEYCODE_6, KeyEvent.KEYCODE_NUMPAD_6 -> 6
+            KeyEvent.KEYCODE_7, KeyEvent.KEYCODE_NUMPAD_7 -> 7
+            KeyEvent.KEYCODE_8, KeyEvent.KEYCODE_NUMPAD_8 -> 8
+            KeyEvent.KEYCODE_9, KeyEvent.KEYCODE_NUMPAD_9 -> 9
+            else -> null
+        }
+    }
+
+    private fun showChannelNumberOverlay(text: String) {
+        binding.channelNumberText.text = text
+        binding.channelNumberText.visibility = View.VISIBLE
+        channelNumberHideJob?.cancel()
+        channelNumberHideJob = scope.launch {
+            delay(CHANNEL_NUMBER_HIDE_MS)
+            binding.channelNumberText.visibility = View.GONE
+        }
     }
 
     private fun playCurrentSource(resetAttempts: Boolean, forceHls: Boolean = false) {
@@ -302,6 +397,8 @@ class MainActivity : AppCompatActivity() {
         if (resetAttempts) {
             attemptedSourceIndexes.clear()
             hlsRetriedSourceIndexes.clear()
+            singleSourceRetryCount = 0
+            singleSourceRetryJob?.cancel()
         }
         attemptedSourceIndexes.add(currentSourceIndex)
         cancelBufferingFailover()
@@ -323,8 +420,7 @@ class MainActivity : AppCompatActivity() {
         if (currentChannelIndex !in channelGroups.indices) return
         val group = channelGroups[currentChannelIndex]
         if (group.sources.size < 2) {
-            AppLogStore.w(TAG, "Single-source channel failed, switching channel, reason=$reason")
-            switchChannel(1)
+            retryCurrentSingleSource(reason)
             return
         }
 
@@ -339,6 +435,29 @@ class MainActivity : AppCompatActivity() {
         }
 
         AppLogStore.e(TAG, "All sources failed for channel: ${group.name}")
+        retryCurrentSingleSource("all_sources_failed")
+    }
+
+    private fun retryCurrentSingleSource(reason: String) {
+        if (currentChannelIndex !in channelGroups.indices) return
+        val group = channelGroups[currentChannelIndex]
+        singleSourceRetryCount += 1
+        val retryDelayMs = (SINGLE_SOURCE_RETRY_BASE_MS * singleSourceRetryCount.toLong())
+            .coerceAtMost(SINGLE_SOURCE_RETRY_MAX_MS)
+
+        AppLogStore.w(
+            TAG,
+            "Single-source retry for ${group.name}, reason=$reason, attempt=$singleSourceRetryCount, delayMs=$retryDelayMs"
+        )
+
+        singleSourceRetryJob?.cancel()
+        singleSourceRetryJob = scope.launch {
+            delay(retryDelayMs)
+            if (currentChannelIndex !in channelGroups.indices) return@launch
+            currentSourceIndex = 0
+            hlsRetriedSourceIndexes.remove(currentSourceIndex)
+            playCurrentSource(resetAttempts = false)
+        }
     }
 
     private fun scheduleBufferingFailover() {
@@ -472,8 +591,13 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val BACKEND_INFO_AUTO_HIDE_MS = 4000L
         private const val BUFFERING_FAILOVER_MS = 10000L
+        private const val CHANNEL_ZAP_DEBOUNCE_MS = 300L
+        private const val CHANNEL_NUMBER_HIDE_MS = 1500L
+        private const val NUMERIC_INPUT_COMMIT_MS = 900L
         private const val READY_STALL_CHECK_INTERVAL_MS = 2000L
         private const val READY_STALL_TIMEOUT_MS = 10000L
         private const val READY_STALL_ADVANCE_TOLERANCE_MS = 200L
+        private const val SINGLE_SOURCE_RETRY_BASE_MS = 1200L
+        private const val SINGLE_SOURCE_RETRY_MAX_MS = 5000L
     }
 }
