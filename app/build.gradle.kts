@@ -13,7 +13,7 @@ android {
         targetSdk = 28
         versionCode = 1
         versionName = "1.0"
-        buildConfigField("String", "PLAYLIST_URL", "\"http://192.168.10.240:5220\"")
+        buildConfigField("String", "PLAYLIST_URL", "\"\"")
     }
 
     buildFeatures {
