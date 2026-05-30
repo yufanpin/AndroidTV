@@ -1,0 +1,9 @@
+*.apk
+*.png
+build/
+.idea/
+*.iml
+local.properties
+# Test artifacts
+TiviMateLite-debug-apk/
+artifact_download/
