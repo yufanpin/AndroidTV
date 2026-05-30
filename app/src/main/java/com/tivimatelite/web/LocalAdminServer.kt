@@ -23,26 +23,49 @@ class LocalAdminServer(
             "/logs" -> htmlResponse(buildLogsPage())
             "/logs/raw" -> newFixedLengthResponse(Response.Status.OK, MIME_PLAINTEXT, AppLogStore.dump())
             "/channels.m3u", "/playlist" -> {
-                val playlist = PlaylistStore.loadEffectivePlaylist(appContext)
-                newFixedLengthResponse(Response.Status.OK, "application/x-mpegURL", playlist)
+                val effective = PlaylistStore.loadEffectivePlaylist(appContext)
+                val response = newFixedLengthResponse(Response.Status.OK, "application/x-mpegURL", effective.content)
+                response.addHeader("X-Playlist-Mode", effective.mode)
+                response.addHeader("X-Playlist-Active", effective.activeSourceLabel)
+                response
             }
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
         }
     }
 
     private fun handlePost(session: IHTTPSession): Response {
+        runCatching {
+            session.parseBody(HashMap())
+        }.onFailure {
+            AppLogStore.w("AdminServer", "POST parseBody failed", it)
+        }
+
         return when (session.uri) {
-            "/save" -> {
-                val form = HashMap<String, String>()
-                session.parseBody(form)
-                val content = session.parameters["playlist"]?.firstOrNull().orEmpty()
-                PlaylistStore.saveCustomPlaylist(appContext, content)
-                AppLogStore.i("AdminServer", "Playlist updated from web admin")
+            "/mode" -> {
+                val mode = session.parameters["mode"]?.firstOrNull().orEmpty()
+                if (mode == "custom") PlaylistStore.setModeCustom(appContext) else PlaylistStore.setModeBuiltin(appContext)
+                redirect("/")
+            }
+            "/source/add" -> {
+                val name = session.parameters["name"]?.firstOrNull().orEmpty()
+                val url = session.parameters["url"]?.firstOrNull().orEmpty()
+                PlaylistStore.addCustomSource(appContext, name, url)
+                redirect("/")
+            }
+            "/source/select" -> {
+                val id = session.parameters["id"]?.firstOrNull().orEmpty()
+                PlaylistStore.selectCustomSource(appContext, id)
+                PlaylistStore.setModeCustom(appContext)
+                redirect("/")
+            }
+            "/source/delete" -> {
+                val id = session.parameters["id"]?.firstOrNull().orEmpty()
+                PlaylistStore.deleteCustomSource(appContext, id)
                 redirect("/")
             }
             "/logs/clear" -> {
                 AppLogStore.clear()
-                AppLogStore.i("AdminServer", "Log cleared from web admin")
+                AppLogStore.i("AdminServer", "日志已清空")
                 redirect("/logs")
             }
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
@@ -60,32 +83,72 @@ class LocalAdminServer(
     }
 
     private fun buildHomePage(): String {
-        val playlist = escapeHtml(PlaylistStore.loadEffectivePlaylist(appContext))
-        val hasCustom = PlaylistStore.hasCustomPlaylist(appContext)
+        val isCustom = PlaylistStore.isCustomMode(appContext)
+        val selectedId = PlaylistStore.getSelectedSourceId(appContext)
+        val sources = PlaylistStore.getCustomSources(appContext)
+        val effective = PlaylistStore.loadEffectivePlaylist(appContext)
+
+        val rows = buildString {
+            for (source in sources) {
+                val checked = if (source.id == selectedId) "checked" else ""
+                append("<tr>")
+                append("<td><form action=\"/source/select\" method=\"post\"><input type=\"hidden\" name=\"id\" value=\"${escapeHtml(source.id)}\"/><input type=\"radio\" $checked onclick=\"this.form.submit()\"/></form></td>")
+                append("<td>${escapeHtml(source.name)}</td>")
+                append("<td>${escapeHtml(source.url)}</td>")
+                append("<td><form action=\"/source/delete\" method=\"post\"><input type=\"hidden\" name=\"id\" value=\"${escapeHtml(source.id)}\"/><button type=\"submit\">删除</button></form></td>")
+                append("</tr>")
+            }
+        }
+
         return """
             <!doctype html>
             <html>
               <head>
                 <meta charset="utf-8" />
-                <title>TiviMateLite Admin</title>
+                <title>TiviMateLite 后台</title>
                 <style>
                   body { font-family: sans-serif; background: #111; color: #fff; margin: 24px; }
-                  textarea { width: 100%; height: 420px; background: #000; color: #fff; border: 1px solid #333; padding: 10px; }
-                  button { padding: 10px 16px; margin-top: 10px; }
+                  input, button { padding: 8px; }
+                  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                  th, td { border: 1px solid #333; padding: 8px; vertical-align: top; }
+                  th { background: #1a1a1a; }
                   a { color: #8ecbff; }
-                  .tip { color: #aaa; margin-top: 8px; }
+                  .box { border: 1px solid #333; padding: 12px; margin-top: 12px; }
                 </style>
               </head>
               <body>
-                <h2>TiviMateLite Playlist Admin</h2>
-                <p>Custom playlist active: <b>${if (hasCustom) "YES" else "NO"}</b></p>
-                <form action="/save" method="post">
-                  <textarea name="playlist">$playlist</textarea>
-                  <br/>
-                  <button type="submit">Save Playlist</button>
-                </form>
-                <p><a href="/logs">View App Logs</a></p>
-                <p class="tip">Save immediately affects /channels.m3u source for this app.</p>
+                <h2>TiviMateLite 本地后台</h2>
+                <p><b>当前生效源：</b>${escapeHtml(effective.activeSourceLabel)}</p>
+
+                <div class="box">
+                  <h3>源模式</h3>
+                  <form action="/mode" method="post">
+                    <label><input type="radio" name="mode" value="builtin" ${if (!isCustom) "checked" else ""}/> 使用内置源</label><br/>
+                    <label><input type="radio" name="mode" value="custom" ${if (isCustom) "checked" else ""}/> 使用自定义源</label><br/><br/>
+                    <button type="submit">保存模式</button>
+                  </form>
+                </div>
+
+                <div class="box">
+                  <h3>添加自定义源</h3>
+                  <form action="/source/add" method="post">
+                    <input type="text" name="name" placeholder="源名称" style="width:220px"/>
+                    <input type="text" name="url" placeholder="http://.../channels.m3u" style="width:420px"/>
+                    <button type="submit">添加</button>
+                  </form>
+                </div>
+
+                <div class="box">
+                  <h3>自定义源列表（勾选即启用）</h3>
+                  <table>
+                    <thead><tr><th>启用</th><th>名称</th><th>地址</th><th>操作</th></tr></thead>
+                    <tbody>
+                      $rows
+                    </tbody>
+                  </table>
+                </div>
+
+                <p><a href="/logs">查看应用日志</a></p>
               </body>
             </html>
         """.trimIndent()
@@ -98,7 +161,7 @@ class LocalAdminServer(
             <html>
               <head>
                 <meta charset="utf-8" />
-                <title>TiviMateLite Logs</title>
+                <title>TiviMateLite 日志</title>
                 <style>
                   body { font-family: monospace; background: #111; color: #fff; margin: 24px; }
                   pre { background: #000; border: 1px solid #333; padding: 12px; white-space: pre-wrap; }
@@ -107,10 +170,10 @@ class LocalAdminServer(
                 </style>
               </head>
               <body>
-                <h2>App Logs</h2>
-                <p><a href="/">Back to Playlist Admin</a></p>
+                <h2>应用日志</h2>
+                <p><a href="/">返回后台</a></p>
                 <form action="/logs/clear" method="post">
-                  <button type="submit">Clear Logs</button>
+                  <button type="submit">清空日志</button>
                 </form>
                 <pre id="logBox">$logs</pre>
                 <script>

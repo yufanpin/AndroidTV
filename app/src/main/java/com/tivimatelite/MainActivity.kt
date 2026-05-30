@@ -141,8 +141,8 @@ class MainActivity : AppCompatActivity() {
     private suspend fun loadChannelRows(): List<Channel> {
         val remoteResult = RemotePlaylistRepository.loadChannels()
         if (remoteResult != null) {
-            activePlaylistSource = remoteResult.sourceUrl
-            AppLogStore.i(TAG, "Loaded channels from remote backend: ${remoteResult.sourceUrl}")
+            activePlaylistSource = remoteResult.activeSourceLabel
+            AppLogStore.i(TAG, "Loaded channels from remote backend: ${remoteResult.activeSourceLabel}")
             return remoteResult.channels
         }
 

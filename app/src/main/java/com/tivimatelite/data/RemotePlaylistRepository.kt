@@ -18,7 +18,6 @@ import kotlinx.coroutines.withContext
 
 object RemotePlaylistRepository {
     private const val TAG = "RemotePlaylistRepo"
-    private const val BACKEND_PORT = 5220
     private const val CONNECT_TIMEOUT_MS = 3500
     private const val READ_TIMEOUT_MS = 7000
 
@@ -37,13 +36,15 @@ object RemotePlaylistRepository {
         }
 
         for (url in urls) {
-            val channels = loadFromUrl(url)
-            if (!channels.isNullOrEmpty()) {
+            val loaded = loadFromUrl(url)
+            if (loaded != null && loaded.channels.isNotEmpty()) {
                 updateProbeInfo(urls, url)
-                AppLogStore.i(TAG, "Remote playlist loaded from $url")
+                val active = loaded.activeSourceLabel ?: url
+                AppLogStore.i(TAG, "Remote playlist loaded from $active")
                 return@withContext RemotePlaylistResult(
                     sourceUrl = url,
-                    channels = channels
+                    activeSourceLabel = active,
+                    channels = loaded.channels
                 )
             }
         }
@@ -74,7 +75,7 @@ object RemotePlaylistRepository {
         )
     }
 
-    private suspend fun loadFromUrl(url: String): List<Channel>? = withContext(Dispatchers.IO) {
+    private suspend fun loadFromUrl(url: String): LoadedRemotePlaylist? = withContext(Dispatchers.IO) {
         runCatching {
             val connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = CONNECT_TIMEOUT_MS
@@ -82,13 +83,14 @@ object RemotePlaylistRepository {
                 requestMethod = "GET"
                 useCaches = false
             }
+            val activeSourceLabel = connection.getHeaderField("X-Playlist-Active")
 
             connection.inputStream.use { input ->
                 val channels = ArrayList<Channel>(512)
                 M3U8Parser.parse(input).collect { channel ->
                     channels.add(channel)
                 }
-                channels
+                LoadedRemotePlaylist(channels, activeSourceLabel)
             }
         }.onFailure {
             Log.w(TAG, "Remote playlist load failed for $url", it)
@@ -114,7 +116,13 @@ object RemotePlaylistRepository {
 
     data class RemotePlaylistResult(
         val sourceUrl: String,
+        val activeSourceLabel: String,
         val channels: List<Channel>
+    )
+
+    private data class LoadedRemotePlaylist(
+        val channels: List<Channel>,
+        val activeSourceLabel: String?
     )
 
     data class PlaylistProbeInfo(
