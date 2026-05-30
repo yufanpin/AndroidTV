@@ -12,13 +12,13 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
 import com.tivimatelite.web.AppLogStore
 
-@UnstableApi
 object PlayerManager {
     private const val TAG = "PlayerManager"
     private const val MIN_BUFFER_MS = 5_000
@@ -61,7 +61,6 @@ object PlayerManager {
         }
     }
 
-    @OptIn(UnstableApi::class)
     private fun buildPlayer(context: Context): ExoPlayer {
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
@@ -88,21 +87,32 @@ object PlayerManager {
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
-        val audioSink = DefaultAudioSink.Builder(context)
-            .setEnableAudioTrackPlaybackParams(true)
-            .build()
-        val renderersFactory = DefaultRenderersFactory(context)
-            .setAudioSink(audioSink)
-
         return ExoPlayer.Builder(context)
             .setLoadControl(loadControl)
             .setMediaSourceFactory(mediaSourceFactory)
-            .setRenderersFactory(renderersFactory)
+            .setRenderersFactory(buildRenderersFactory(context))
             .build()
             .apply {
                 addListener(playbackListener)
                 addAnalyticsListener(codecAnalyticsListener)
             }
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun buildRenderersFactory(context: Context): DefaultRenderersFactory {
+        return object : DefaultRenderersFactory(context) {
+            @OptIn(UnstableApi::class)
+            override fun buildAudioSink(
+                context: Context,
+                enableAudioTrackPlaybackParams: Boolean,
+                enableOffload: Boolean,
+                enableLowLatency: Boolean
+            ): AudioSink {
+                return DefaultAudioSink.Builder(context)
+                    .setEnableAudioTrackPlaybackParams(true)
+                    .build()
+            }
+        }
     }
 
     private val playbackListener = object : Player.Listener {
