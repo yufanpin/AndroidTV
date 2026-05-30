@@ -1,6 +1,7 @@
 package com.tivimatelite
 
 import android.media.AudioManager
+import android.net.TrafficStats
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
@@ -19,6 +20,7 @@ import com.tivimatelite.web.AppLogStore
 import com.tivimatelite.web.LocalAdminServerManager
 import com.tivimatelite.web.PlaylistStore
 import java.io.FileNotFoundException
+import java.util.Locale
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
@@ -46,9 +48,13 @@ class MainActivity : AppCompatActivity() {
     private var channelNumberHideJob: Job? = null
     private var numericCommitJob: Job? = null
     private var singleSourceRetryJob: Job? = null
+    private var netSpeedJob: Job? = null
     private var pendingSwitchIndex: Int? = null
     private val numericInputBuffer = StringBuilder(4)
     private var singleSourceRetryCount = 0
+    private var readyStallIgnoreUntilMs = 0L
+    private var lastReadyStallRecoveryAtMs = 0L
+    private var lastSingleSourceRetryAtMs = 0L
     private var lastPlaylistFingerprint: String? = null
     private var activePlaylistSource = "local assets/channels.m3u"
 
@@ -70,6 +76,7 @@ class MainActivity : AppCompatActivity() {
                     cancelBufferingFailover()
                     singleSourceRetryCount = 0
                     singleSourceRetryJob?.cancel()
+                    lastSingleSourceRetryAtMs = 0L
                     startReadyStallWatch()
                 }
                 Player.STATE_ENDED -> {
@@ -98,6 +105,7 @@ class MainActivity : AppCompatActivity() {
         lastPlaylistFingerprint = PlaylistStore.getConfigFingerprint(this)
         loadChannels()
         startPlaylistWatcher()
+        startNetworkSpeedMonitor()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -171,6 +179,7 @@ class MainActivity : AppCompatActivity() {
         channelNumberHideJob?.cancel()
         numericCommitJob?.cancel()
         singleSourceRetryJob?.cancel()
+        netSpeedJob?.cancel()
         cancelReadyStallWatch()
         cancelBufferingFailover()
         scope.cancel()
@@ -388,6 +397,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun startNetworkSpeedMonitor() {
+        netSpeedJob?.cancel()
+        netSpeedJob = scope.launch {
+            var lastBytes = TrafficStats.getTotalRxBytes()
+            var lastTimeMs = System.currentTimeMillis()
+
+            while (true) {
+                delay(NET_SPEED_UPDATE_MS)
+                val nowBytes = TrafficStats.getTotalRxBytes()
+                val nowTimeMs = System.currentTimeMillis()
+                val byteDiff = (nowBytes - lastBytes).coerceAtLeast(0L)
+                val timeDiffMs = (nowTimeMs - lastTimeMs).coerceAtLeast(1L)
+                val bytesPerSecond = byteDiff * 1000.0 / timeDiffMs
+                binding.netSpeedText.text = formatSpeed(bytesPerSecond)
+                lastBytes = nowBytes
+                lastTimeMs = nowTimeMs
+            }
+        }
+    }
+
+    private fun formatSpeed(bytesPerSecond: Double): String {
+        return when {
+            bytesPerSecond >= 1024.0 * 1024.0 -> String.format(Locale.US, "%.2f MB/s", bytesPerSecond / (1024.0 * 1024.0))
+            bytesPerSecond >= 1024.0 -> String.format(Locale.US, "%.0f KB/s", bytesPerSecond / 1024.0)
+            else -> String.format(Locale.US, "%.0f B/s", bytesPerSecond)
+        }
+    }
+
     private fun playCurrentSource(resetAttempts: Boolean, forceHls: Boolean = false) {
         if (currentChannelIndex !in channelGroups.indices) return
         val group = channelGroups[currentChannelIndex]
@@ -398,11 +435,13 @@ class MainActivity : AppCompatActivity() {
             attemptedSourceIndexes.clear()
             hlsRetriedSourceIndexes.clear()
             singleSourceRetryCount = 0
+            lastSingleSourceRetryAtMs = 0L
             singleSourceRetryJob?.cancel()
         }
         attemptedSourceIndexes.add(currentSourceIndex)
         cancelBufferingFailover()
         cancelReadyStallWatch()
+        readyStallIgnoreUntilMs = System.currentTimeMillis() + READY_STALL_WARMUP_MS
 
         val sourceUrl = group.sources[currentSourceIndex]
         try {
@@ -441,9 +480,13 @@ class MainActivity : AppCompatActivity() {
     private fun retryCurrentSingleSource(reason: String) {
         if (currentChannelIndex !in channelGroups.indices) return
         val group = channelGroups[currentChannelIndex]
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastSingleSourceRetryAtMs < SINGLE_SOURCE_RETRY_MIN_GAP_MS) return
+
         singleSourceRetryCount += 1
         val retryDelayMs = (SINGLE_SOURCE_RETRY_BASE_MS * singleSourceRetryCount.toLong())
             .coerceAtMost(SINGLE_SOURCE_RETRY_MAX_MS)
+        lastSingleSourceRetryAtMs = nowMs
 
         AppLogStore.w(
             TAG,
@@ -455,8 +498,7 @@ class MainActivity : AppCompatActivity() {
             delay(retryDelayMs)
             if (currentChannelIndex !in channelGroups.indices) return@launch
             currentSourceIndex = 0
-            hlsRetriedSourceIndexes.remove(currentSourceIndex)
-            playCurrentSource(resetAttempts = false)
+            playCurrentSource(resetAttempts = false, forceHls = true)
         }
     }
 
@@ -486,6 +528,13 @@ class MainActivity : AppCompatActivity() {
             while (true) {
                 delay(READY_STALL_CHECK_INTERVAL_MS)
                 val currentPlayer = binding.playerView.player ?: return@launch
+                val nowMs = System.currentTimeMillis()
+
+                if (nowMs < readyStallIgnoreUntilMs) {
+                    lastPositionMs = currentPlayer.currentPosition
+                    stagnantDurationMs = 0L
+                    continue
+                }
 
                 if (currentPlayer.playbackState != Player.STATE_READY || !currentPlayer.playWhenReady) {
                     lastPositionMs = currentPlayer.currentPosition
@@ -505,7 +554,13 @@ class MainActivity : AppCompatActivity() {
                 stagnantDurationMs += READY_STALL_CHECK_INTERVAL_MS
                 if (stagnantDurationMs < READY_STALL_TIMEOUT_MS) continue
 
+                if (nowMs - lastReadyStallRecoveryAtMs < READY_STALL_RECOVERY_COOLDOWN_MS) {
+                    stagnantDurationMs = 0L
+                    continue
+                }
+
                 AppLogStore.w(TAG, "Detected ready stall, trying next source")
+                lastReadyStallRecoveryAtMs = nowMs
                 playNextSourceForCurrentChannel("ready_stall")
                 return@launch
             }
@@ -595,9 +650,13 @@ class MainActivity : AppCompatActivity() {
         private const val CHANNEL_NUMBER_HIDE_MS = 1500L
         private const val NUMERIC_INPUT_COMMIT_MS = 900L
         private const val READY_STALL_CHECK_INTERVAL_MS = 2000L
-        private const val READY_STALL_TIMEOUT_MS = 10000L
+        private const val READY_STALL_TIMEOUT_MS = 30000L
         private const val READY_STALL_ADVANCE_TOLERANCE_MS = 200L
-        private const val SINGLE_SOURCE_RETRY_BASE_MS = 1200L
-        private const val SINGLE_SOURCE_RETRY_MAX_MS = 5000L
+        private const val READY_STALL_WARMUP_MS = 15000L
+        private const val READY_STALL_RECOVERY_COOLDOWN_MS = 60000L
+        private const val SINGLE_SOURCE_RETRY_BASE_MS = 2500L
+        private const val SINGLE_SOURCE_RETRY_MAX_MS = 8000L
+        private const val SINGLE_SOURCE_RETRY_MIN_GAP_MS = 4000L
+        private const val NET_SPEED_UPDATE_MS = 1000L
     }
 }
