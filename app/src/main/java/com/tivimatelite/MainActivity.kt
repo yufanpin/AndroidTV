@@ -17,6 +17,7 @@ import com.tivimatelite.player.PlaybackHistoryStore
 import com.tivimatelite.player.PlayerManager
 import com.tivimatelite.web.AppLogStore
 import com.tivimatelite.web.LocalAdminServerManager
+import com.tivimatelite.web.PlaylistStore
 import java.io.FileNotFoundException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
@@ -38,6 +39,9 @@ class MainActivity : AppCompatActivity() {
     private val hlsRetriedSourceIndexes = HashSet<Int>(8)
     private var backendInfoHideJob: Job? = null
     private var bufferingFailoverJob: Job? = null
+    private var playlistWatchJob: Job? = null
+    private var reloadChannelsJob: Job? = null
+    private var lastPlaylistFingerprint: String? = null
     private var activePlaylistSource = "local assets/channels.m3u"
 
     private val playerListener = object : Player.Listener {
@@ -71,7 +75,9 @@ class MainActivity : AppCompatActivity() {
         binding.playerView.player = player
         binding.playerView.requestFocus()
 
+        lastPlaylistFingerprint = PlaylistStore.getConfigFingerprint(this)
         loadChannels()
+        startPlaylistWatcher()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -116,6 +122,8 @@ class MainActivity : AppCompatActivity() {
         binding.playerView.player?.removeListener(playerListener)
         binding.playerView.player = null
         backendInfoHideJob?.cancel()
+        playlistWatchJob?.cancel()
+        reloadChannelsJob?.cancel()
         cancelBufferingFailover()
         scope.cancel()
         if (isFinishing) {
@@ -136,6 +144,66 @@ class MainActivity : AppCompatActivity() {
             }
 
             restoreLastPlayedChannel()
+            playCurrentSource(resetAttempts = true)
+        }
+    }
+
+    private fun startPlaylistWatcher() {
+        playlistWatchJob?.cancel()
+        playlistWatchJob = scope.launch {
+            while (true) {
+                delay(1200)
+                val currentFingerprint = PlaylistStore.getConfigFingerprint(this@MainActivity)
+                if (currentFingerprint == lastPlaylistFingerprint) continue
+                lastPlaylistFingerprint = currentFingerprint
+                AppLogStore.i(TAG, "Playlist config changed, reloading channels")
+                reloadChannelsKeepingCurrent()
+            }
+        }
+    }
+
+    private fun reloadChannelsKeepingCurrent() {
+        if (reloadChannelsJob?.isActive == true) return
+        val previousGroup = channelGroups.getOrNull(currentChannelIndex)
+        val previousChannelName = previousGroup?.name
+        val previousSourceUrl = previousGroup?.sources?.getOrNull(currentSourceIndex)
+
+        reloadChannelsJob = scope.launch {
+            val channels = loadChannelRows()
+            val newGroups = groupChannels(channels)
+
+            if (newGroups.isEmpty()) {
+                AppLogStore.e(TAG, "Reload failed: no channels available")
+                return@launch
+            }
+
+            channelGroups = newGroups
+
+            val byUrlIndex = previousSourceUrl?.let { url ->
+                newGroups.indexOfFirst { group -> url in group.sources }
+            } ?: -1
+
+            if (byUrlIndex >= 0) {
+                currentChannelIndex = byUrlIndex
+                currentSourceIndex = newGroups[byUrlIndex].sources.indexOf(previousSourceUrl).coerceAtLeast(0)
+                playCurrentSource(resetAttempts = true)
+                return@launch
+            }
+
+            val byNameIndex = previousChannelName?.let { name ->
+                newGroups.indexOfFirst { group -> group.name == name }
+            } ?: -1
+
+            if (byNameIndex >= 0) {
+                currentChannelIndex = byNameIndex
+                currentSourceIndex = 0
+                playCurrentSource(resetAttempts = true)
+                return@launch
+            }
+
+            currentChannelIndex = 0
+            currentSourceIndex = 0
+            AppLogStore.w(TAG, "Previous channel not found after reload, switched to ${newGroups[0].name}")
             playCurrentSource(resetAttempts = true)
         }
     }

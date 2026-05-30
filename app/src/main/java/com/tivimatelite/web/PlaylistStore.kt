@@ -96,6 +96,14 @@ object PlaylistStore {
         return getPrefs(context).getString(KEY_SELECTED_ID, null)
     }
 
+    fun getConfigFingerprint(context: Context): String {
+        val prefs = getPrefs(context)
+        val mode = prefs.getString(KEY_MODE, MODE_BUILTIN).orEmpty()
+        val selectedId = prefs.getString(KEY_SELECTED_ID, "").orEmpty()
+        val sourcesJson = prefs.getString(KEY_SOURCES_JSON, "[]").orEmpty()
+        return "$mode|$selectedId|$sourcesJson"
+    }
+
     fun loadEffectivePlaylist(context: Context): EffectivePlaylist {
         if (isCustomMode(context)) {
             val sources = getCustomSources(context)
