@@ -88,6 +88,7 @@ object PlayerManager {
         return ExoPlayer.Builder(context)
             .setLoadControl(loadControl)
             .setMediaSourceFactory(mediaSourceFactory)
+            .experimentalSetEnableAudioTrackPlaybackParams(true)
             .build()
             .apply {
                 addListener(playbackListener)
