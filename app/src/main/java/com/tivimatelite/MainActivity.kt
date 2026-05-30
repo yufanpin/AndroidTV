@@ -656,11 +656,11 @@ class MainActivity : AppCompatActivity() {
         private const val CHANNEL_ZAP_DEBOUNCE_MS = 300L
         private const val CHANNEL_NUMBER_HIDE_MS = 1500L
         private const val NUMERIC_INPUT_COMMIT_MS = 900L
-        private const val READY_STALL_CHECK_INTERVAL_MS = 3000L
-        private const val READY_STALL_TIMEOUT_MS = 60000L
-        private const val READY_STALL_ADVANCE_TOLERANCE_MS = 500L
-        private const val READY_STALL_WARMUP_MS = 30000L
-        private const val READY_STALL_RECOVERY_COOLDOWN_MS = 120000L
+        private const val READY_STALL_CHECK_INTERVAL_MS = 5000L
+        private const val READY_STALL_TIMEOUT_MS = 300000L
+        private const val READY_STALL_ADVANCE_TOLERANCE_MS = 1000L
+        private const val READY_STALL_WARMUP_MS = 60000L
+        private const val READY_STALL_RECOVERY_COOLDOWN_MS = 300000L
         private const val SINGLE_SOURCE_RETRY_BASE_MS = 8000L
         private const val SINGLE_SOURCE_RETRY_MAX_MS = 20000L
         private const val SINGLE_SOURCE_RETRY_MIN_GAP_MS = 10000L
