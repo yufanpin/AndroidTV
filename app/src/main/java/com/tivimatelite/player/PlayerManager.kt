@@ -2,6 +2,7 @@ package com.tivimatelite.player
 
 import android.content.Context
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -29,9 +30,14 @@ object PlayerManager {
         }
     }
 
-    fun play(context: Context, url: String) {
+    fun play(context: Context, url: String, forceHls: Boolean = false) {
         val exoPlayer = getPlayer(context)
-        exoPlayer.setMediaItem(MediaItem.fromUri(url))
+        val mediaItemBuilder = MediaItem.Builder().setUri(url)
+        if (forceHls) {
+            mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
+            AppLogStore.i(TAG, "Force HLS retry for current source")
+        }
+        exoPlayer.setMediaItem(mediaItemBuilder.build())
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
     }

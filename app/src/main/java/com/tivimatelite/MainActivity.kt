@@ -35,12 +35,14 @@ class MainActivity : AppCompatActivity() {
     private var currentChannelIndex = -1
     private var currentSourceIndex = 0
     private val attemptedSourceIndexes = HashSet<Int>(8)
+    private val hlsRetriedSourceIndexes = HashSet<Int>(8)
     private var backendInfoHideJob: Job? = null
     private var bufferingFailoverJob: Job? = null
     private var activePlaylistSource = "local assets/channels.m3u"
 
     private val playerListener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
+            if (tryForceHlsForCurrentSource(error)) return
             AppLogStore.w(TAG, "Playback error, trying next source", error)
             playNextSourceForCurrentChannel("player_error")
         }
@@ -211,21 +213,25 @@ class MainActivity : AppCompatActivity() {
         playCurrentSource(resetAttempts = true)
     }
 
-    private fun playCurrentSource(resetAttempts: Boolean) {
+    private fun playCurrentSource(resetAttempts: Boolean, forceHls: Boolean = false) {
         if (currentChannelIndex !in channelGroups.indices) return
         val group = channelGroups[currentChannelIndex]
         if (group.sources.isEmpty()) return
 
         if (currentSourceIndex !in group.sources.indices) currentSourceIndex = 0
-        if (resetAttempts) attemptedSourceIndexes.clear()
+        if (resetAttempts) {
+            attemptedSourceIndexes.clear()
+            hlsRetriedSourceIndexes.clear()
+        }
         attemptedSourceIndexes.add(currentSourceIndex)
         cancelBufferingFailover()
 
         val sourceUrl = group.sources[currentSourceIndex]
         try {
-            PlayerManager.play(this, sourceUrl)
+            PlayerManager.play(this, sourceUrl, forceHls)
             PlaybackHistoryStore.saveLastPlayedChannel(this, group.name, currentSourceIndex, sourceUrl)
-            AppLogStore.i(TAG, "Playing ${group.name} source ${currentSourceIndex + 1}/${group.sources.size}")
+            val modeSuffix = if (forceHls) " (forced HLS)" else ""
+            AppLogStore.i(TAG, "Playing ${group.name} source ${currentSourceIndex + 1}/${group.sources.size}$modeSuffix")
         } catch (exception: Throwable) {
             AppLogStore.e(TAG, "playCurrentSource failed", exception)
             playNextSourceForCurrentChannel("play_call_failed")
@@ -264,6 +270,29 @@ class MainActivity : AppCompatActivity() {
     private fun cancelBufferingFailover() {
         bufferingFailoverJob?.cancel()
         bufferingFailoverJob = null
+    }
+
+    private fun tryForceHlsForCurrentSource(error: PlaybackException): Boolean {
+        if (!isUnrecognizedInputFormat(error)) return false
+        if (currentChannelIndex !in channelGroups.indices) return false
+        if (!hlsRetriedSourceIndexes.add(currentSourceIndex)) return false
+
+        val group = channelGroups[currentChannelIndex]
+        AppLogStore.w(
+            TAG,
+            "Retrying as HLS for ${group.name} source ${currentSourceIndex + 1}/${group.sources.size}"
+        )
+        playCurrentSource(resetAttempts = false, forceHls = true)
+        return true
+    }
+
+    private fun isUnrecognizedInputFormat(error: Throwable): Boolean {
+        var current: Throwable? = error
+        while (current != null) {
+            if (current.javaClass.name.contains("UnrecognizedInputFormatException")) return true
+            current = current.cause
+        }
+        return false
     }
 
     private fun adjustVolume(direction: Int) {
