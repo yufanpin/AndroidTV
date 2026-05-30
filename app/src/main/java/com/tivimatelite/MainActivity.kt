@@ -22,6 +22,8 @@ import com.tivimatelite.web.LocalAdminServerManager
 import com.tivimatelite.web.PlaylistStore
 import java.io.FileNotFoundException
 import java.util.Locale
+import java.util.Timer
+import java.util.TimerTask
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
@@ -120,6 +122,7 @@ class MainActivity : AppCompatActivity() {
         startPlaylistWatcher()
         startNetworkSpeedMonitor()
         startHeartbeat()
+        startWatchdogTimer()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -203,6 +206,7 @@ class MainActivity : AppCompatActivity() {
         netSpeedJob?.cancel()
         cancelReadyStallWatch()
         cancelBufferingFailover()
+        cancelWatchdogTimer()
         scope.cancel()
         if (isFinishing) {
             PlayerManager.release()
@@ -690,6 +694,7 @@ class MainActivity : AppCompatActivity() {
     )
 
     private var heartbeatJob: Job? = null
+    private var watchdogTimer: Timer? = null
 
     private fun startHeartbeat() {
         heartbeatJob?.cancel()
@@ -699,6 +704,29 @@ class MainActivity : AppCompatActivity() {
                 FileLogStore.i(TAG, "HEARTBEAT")
             }
         }
+    }
+
+    private fun startWatchdogTimer() {
+        watchdogTimer?.cancel()
+        val wdFile = java.io.File(cacheDir, "watchdog_timer.txt")
+        wdFile.delete()
+        watchdogTimer = Timer("WatchdogTimer", true)
+        watchdogTimer?.schedule(object : TimerTask() {
+            override fun run() {
+                try {
+                    val line = "${java.text.SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(java.util.Date())} I/Watchdog: ALIVE\n"
+                    java.io.FileOutputStream(wdFile, true).use { fos ->
+                        fos.write(line.toByteArray())
+                        fos.flush()
+                    }
+                } catch (_: Exception) {}
+            }
+        }, 0, 5_000)
+    }
+
+    private fun cancelWatchdogTimer() {
+        watchdogTimer?.cancel()
+        watchdogTimer = null
     }
 
     companion object {
