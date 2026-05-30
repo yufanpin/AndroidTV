@@ -21,6 +21,14 @@ App 当前从下面这个 asset 路径读取直播源：
 app/src/main/assets/channels.m3u
 ```
 
+如果你要改为网页后台统一管理直播源，设置 `app/build.gradle.kts` 里的：
+
+```kotlin
+buildConfigField("String", "PLAYLIST_URL", "\"http://your-server/channels.m3u\"")
+```
+
+App 启动时会先尝试拉取这个远程地址；远程失败才回退到本地 `assets/channels.m3u`。
+
 正式测试前，先放一个小型 `channels.m3u`，建议 5-20 个频道。确认焦点、解析、播放都正常后，再换成几千到几万行的大列表。
 
 示例格式：

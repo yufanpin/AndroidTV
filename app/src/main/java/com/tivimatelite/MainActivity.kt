@@ -3,64 +3,70 @@ package com.tivimatelite
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
-import android.view.View
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.bumptech.glide.Glide
+import com.tivimatelite.data.RemotePlaylistRepository
 import com.tivimatelite.databinding.ActivityMainBinding
 import com.tivimatelite.model.Channel
 import com.tivimatelite.parser.M3U8Parser
 import com.tivimatelite.player.PlaybackHistoryStore
 import com.tivimatelite.player.PlayerManager
-import com.tivimatelite.ui.ChannelAdapter
 import java.io.FileNotFoundException
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 @OptIn(UnstableApi::class)
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
-    private lateinit var adapter: ChannelAdapter
     private val scope = MainScope()
-    private var tuneJob: Job? = null
-    private var firstChannelStarted = false
+
+    private var channelGroups: List<ChannelGroup> = emptyList()
+    private var currentChannelIndex = -1
+    private var currentSourceIndex = 0
+    private val attemptedSourceIndexes = HashSet<Int>(8)
+
+    private val playerErrorListener = object : Player.Listener {
+        override fun onPlayerError(error: PlaybackException) {
+            Log.w(TAG, "Playback error, trying next source", error)
+            playNextSourceForCurrentChannel()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        binding.playerView.player = PlayerManager.getPlayer(this)
-        setupChannelList()
-        loadChannels()
+        val player = PlayerManager.getPlayer(this)
+        player.addListener(playerErrorListener)
+        binding.playerView.player = player
         binding.playerView.requestFocus()
+
+        loadChannels()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
 
         return when (event.keyCode) {
-            KeyEvent.KEYCODE_BACK -> {
-                if (isOverlayVisible()) {
-                    hideOverlay()
-                    true
-                } else {
-                    super.dispatchKeyEvent(event)
-                }
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                switchChannel(-1)
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                switchChannel(1)
+                true
             }
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER,
-            KeyEvent.KEYCODE_DPAD_UP,
-            KeyEvent.KEYCODE_DPAD_DOWN,
             KeyEvent.KEYCODE_DPAD_LEFT,
-            KeyEvent.KEYCODE_DPAD_RIGHT -> handleRemoteKey(event.keyCode)
+            KeyEvent.KEYCODE_DPAD_RIGHT -> true
             else -> super.dispatchKeyEvent(event)
         }
     }
@@ -71,111 +77,157 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        binding.playerView.player?.removeListener(playerErrorListener)
         binding.playerView.player = null
-        tuneJob?.cancel()
         scope.cancel()
         if (isFinishing) PlayerManager.release()
         super.onDestroy()
     }
 
-    private fun setupChannelList() {
-        adapter = ChannelAdapter(Glide.with(this), ::onChannelFocused)
-        binding.channelRecyclerView.layoutManager = LinearLayoutManager(this)
-        binding.channelRecyclerView.adapter = adapter
-        binding.channelRecyclerView.itemAnimator = null
-        binding.channelRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
-                adapter.setLogoLoadingEnabled(newState == RecyclerView.SCROLL_STATE_IDLE, recyclerView)
-            }
-        })
-    }
-
     private fun loadChannels() {
         scope.launch {
-            val channels = ArrayList<Channel>(256)
-            val lastPlayedUrl = PlaybackHistoryStore.getLastPlayedUrl(this@MainActivity)
-            var firstParsedChannel: Channel? = null
-            try {
-                assets.open("channels.m3u").use { input ->
-                    M3U8Parser.parse(input).collect { channel ->
-                        if (firstParsedChannel == null) firstParsedChannel = channel
-                        channels.add(channel)
-                        adapter.submitList(ArrayList(channels))
-                        if (!firstChannelStarted && channel.streamUrl == lastPlayedUrl) {
-                            startFirstChannel(channel)
-                        }
-                    }
-                }
-                if (!firstChannelStarted) {
-                    firstParsedChannel?.let { startFirstChannel(it) }
-                }
-            } catch (exception: FileNotFoundException) {
-                Log.w(TAG, "channels.m3u asset not found", exception)
-                adapter.submitList(emptyList())
+            val channels = loadChannelRows()
+            channelGroups = groupChannels(channels)
+
+            if (channelGroups.isEmpty()) {
+                Log.e(TAG, "No channels available")
+                return@launch
             }
+
+            restoreLastPlayedChannel()
+            playCurrentSource(resetAttempts = true)
         }
     }
 
-    private fun handleRemoteKey(keyCode: Int): Boolean {
-        if (!isOverlayVisible()) {
-            showOverlay()
-            return true
+    private suspend fun loadChannelRows(): List<Channel> {
+        val remoteChannels = RemotePlaylistRepository.loadChannels()
+        if (!remoteChannels.isNullOrEmpty()) {
+            Log.i(TAG, "Loaded channels from remote backend")
+            return remoteChannels
         }
 
-        return when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_LEFT,
-            KeyEvent.KEYCODE_DPAD_RIGHT -> true
-            else -> false
+        return try {
+            val channels = ArrayList<Channel>(512)
+            assets.open("channels.m3u").use { input ->
+                M3U8Parser.parse(input).collect { channel ->
+                    channels.add(channel)
+                }
+            }
+            Log.i(TAG, "Loaded channels from local asset")
+            channels
+        } catch (exception: FileNotFoundException) {
+            Log.w(TAG, "channels.m3u asset not found", exception)
+            emptyList()
         }
     }
 
-    private fun onChannelFocused(channel: Channel) {
-        binding.epgDetailsText.text = channel.epgText
-        tuneJob?.cancel()
-        tuneJob = scope.launch {
-            delay(KEY_DEBOUNCE_MS)
-            playChannel(channel)
+    private fun groupChannels(rows: List<Channel>): List<ChannelGroup> {
+        val grouped = LinkedHashMap<String, LinkedHashSet<String>>(rows.size)
+
+        for (row in rows) {
+            val name = row.name.trim()
+            val url = row.streamUrl.trim()
+            if (name.isEmpty() || url.isEmpty()) continue
+            grouped.getOrPut(name) { LinkedHashSet(4) }.add(url)
+        }
+
+        return grouped.entries.map { entry ->
+            ChannelGroup(name = entry.key, sources = entry.value.toList())
         }
     }
 
-    private fun startFirstChannel(channel: Channel) {
-        if (firstChannelStarted) return
-        firstChannelStarted = true
-        binding.epgDetailsText.text = channel.epgText
-        playChannel(channel)
+    private fun restoreLastPlayedChannel() {
+        val lastState = PlaybackHistoryStore.getLastPlayedState(this)
+
+        val byUrlIndex = lastState.url?.let { savedUrl ->
+            channelGroups.indexOfFirst { group -> savedUrl in group.sources }
+        } ?: -1
+
+        if (byUrlIndex >= 0) {
+            currentChannelIndex = byUrlIndex
+            currentSourceIndex = channelGroups[byUrlIndex].sources.indexOf(lastState.url).coerceAtLeast(0)
+            return
+        }
+
+        val byNameIndex = lastState.channelName?.let { savedName ->
+            channelGroups.indexOfFirst { it.name == savedName }
+        } ?: -1
+
+        if (byNameIndex >= 0) {
+            currentChannelIndex = byNameIndex
+            currentSourceIndex = lastState.sourceIndex.coerceIn(0, channelGroups[byNameIndex].sources.lastIndex)
+            return
+        }
+
+        currentChannelIndex = 0
+        currentSourceIndex = 0
     }
 
-    private fun playChannel(channel: Channel) {
+    private fun switchChannel(delta: Int) {
+        if (channelGroups.isEmpty()) return
+        if (currentChannelIndex < 0) {
+            currentChannelIndex = 0
+            currentSourceIndex = 0
+        } else {
+            val size = channelGroups.size
+            currentChannelIndex = (currentChannelIndex + delta + size) % size
+            currentSourceIndex = 0
+        }
+        playCurrentSource(resetAttempts = true)
+    }
+
+    private fun playCurrentSource(resetAttempts: Boolean) {
+        if (currentChannelIndex !in channelGroups.indices) return
+
+        val group = channelGroups[currentChannelIndex]
+        if (group.sources.isEmpty()) return
+
+        if (currentSourceIndex !in group.sources.indices) {
+            currentSourceIndex = 0
+        }
+
+        if (resetAttempts) attemptedSourceIndexes.clear()
+        attemptedSourceIndexes.add(currentSourceIndex)
+
+        val sourceUrl = group.sources[currentSourceIndex]
         try {
-            PlayerManager.play(this, channel.streamUrl)
-            adapter.setSelectedUrl(channel.streamUrl)
-            PlaybackHistoryStore.saveLastPlayedUrl(this, channel.streamUrl)
+            PlayerManager.play(this, sourceUrl)
+            PlaybackHistoryStore.saveLastPlayedChannel(
+                context = this,
+                channelName = group.name,
+                sourceIndex = currentSourceIndex,
+                url = sourceUrl
+            )
+            Log.i(TAG, "Playing ${group.name} source ${currentSourceIndex + 1}/${group.sources.size}")
         } catch (exception: Throwable) {
-            Log.e(TAG, "playChannel failed: ${channel.streamUrl}", exception)
+            Log.e(TAG, "playCurrentSource failed", exception)
+            playNextSourceForCurrentChannel()
         }
     }
 
-    private fun showOverlay() {
-        binding.overlayPanel.visibility = View.VISIBLE
-        binding.channelRecyclerView.requestFocus()
-        if (adapter.itemCount > 0) {
-            binding.channelRecyclerView.post {
-                binding.channelRecyclerView.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
-            }
+    private fun playNextSourceForCurrentChannel() {
+        if (currentChannelIndex !in channelGroups.indices) return
+        val group = channelGroups[currentChannelIndex]
+        if (group.sources.size < 2) return
+
+        for (offset in 1 until group.sources.size) {
+            val candidateIndex = (currentSourceIndex + offset) % group.sources.size
+            if (attemptedSourceIndexes.contains(candidateIndex)) continue
+
+            currentSourceIndex = candidateIndex
+            playCurrentSource(resetAttempts = false)
+            return
         }
+
+        Log.e(TAG, "All sources failed for channel: ${group.name}")
     }
 
-    private fun hideOverlay() {
-        binding.overlayPanel.visibility = View.GONE
-        binding.playerView.requestFocus()
-    }
-
-    private fun isOverlayVisible(): Boolean {
-        return binding.overlayPanel.visibility == View.VISIBLE
-    }
+    private data class ChannelGroup(
+        val name: String,
+        val sources: List<String>
+    )
 
     companion object {
         private const val TAG = "MainActivity"
-        private const val KEY_DEBOUNCE_MS = 300L
     }
 }
