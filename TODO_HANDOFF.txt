@@ -1,0 +1,96 @@
+TiviMateLite — Handoff for Future AI / Developer
+=================================================
+Last updated: 2026-05-30 19:50 CST
+Current HEAD: b444c34 (clean state)
+
+=== App Overview ===
+- Kotlin + XML + ViewBinding + Media3 ExoPlayer 1.5.1 + NanoHTTPD
+- Android TV IPTV player with built-in web admin panel
+- CI: GitHub Actions (yufanpin/AndroidTV)
+- Device: S905L3 box, Android 9 (SDK 28), 2GB RAM, Ethernet, wired ADB over TCP
+- ADB: C:\Users\yu\Desktop\platform-tools\adb.exe
+- git: C:\Users\yu\AppData\Local\GitHubDesktop\app-3.5.11\resources\app\git\cmd\git.exe
+- gh: C:\Program Files\GitHub CLI\gh.exe
+
+=== Important Working Practices ===
+1. ADB over TCP drops after ~3 minutes of inactivity (even on wired Ethernet).
+   Solution: Send keepalive every 5s: `adb shell echo alive > /dev/null`
+   All long-duration tests MUST include this keepalive.
+
+2. PowerShell $pid is a read-only automatic variable. NEVER assign to $pid.
+   Use $currentPid, $procId, or any other name instead.
+
+3. The app has FileLogStore that writes to context.cacheDir/tivimate_diag.txt.
+   This file persists across ADB disconnects. Pull via:
+   `adb shell cat /data/data/com.tivimatelite/cache/tivimate_diag.txt`
+
+4. Heartbeat logs every 10s (HEARTBEAT_INTERVAL_MS = 10000L).
+   Use this to confirm the app is alive when ADB is disconnected.
+
+=== Confirmed: App is STABLE ===
+- PID 4892 ran continuously for 10+ minutes with ADB keepalive enabled.
+- All previous "app dies at 2.5 minutes" observations were FALSE POSITIVES
+  caused by ADB over TCP timing out. The app itself does NOT crash.
+- No uncaught exceptions, no ANRs, no kernel OOM kills observed.
+- Timer watchdog and heartbeat both confirmed alive throughout.
+
+=== PENDING: Bug Fixes & Improvements ===
+
+[P1] UnexpectedDiscontinuityException — Audio PTS jitter (stuttering)
+ Description: China Mobile source emits audio PTS jumps every 30-40s,
+   causing ExoPlayer to throw UnexpectedDiscontinuityException.
+   User perceives this as "一卡一卡" (periodic stutter).
+ Current state: setEnableAudioTrackPlaybackParams(true) was enabled
+   via reflection. On-device logs confirm the call succeeds. However,
+   the impact on this specific exception frequency has NOT been verified.
+ Next step:
+   1. Deploy current clean code.
+   2. Run app with ADB keepalive.
+   3. Monitor logcat for "UnexpectedDiscontinuity" occurrences for 5+ min.
+   4. Count frequency and compare against baseline (before audio param).
+   5. If unchanged, consider:
+      a. Disabling audio playback params (revert reflection).
+      b. Adding explicit catch/handling for this exception in PlayerManager.
+      c. Switching to different source (some sources may not have PTS issues).
+
+[P2] fmt=ts2hls source — HLS timeline discontinuity
+ Description: Source 1 with fmt=ts2hls suffix is a server-side real-time
+   transcoded HLS stream. Its HLS timeline is discontinuous, causing
+   currentPosition to stall (stuck at same value).
+ Current state: Stalled position detection is handled by READY_STALL
+   mechanism (300s timeout), which is very conservative.
+ Next step:
+   1. Verify if this affects user experience (does stalling actually happen?).
+   2. If yes, consider disabling source 1 or adding faster fallback.
+
+[P3] ADB keepalive automation
+ Description: Every long test needs keepalive. Consider a helper script
+   or wrapper that spawns a background ADB pinger alongside tests.
+ Suggestion: Add a keepalive.ps1 script to the repo that runs
+   keepalive in background until explicitly stopped.
+
+=== DONE (notable items) ===
+- FileLogStore.kt added with uncaught exception handler and explicit flush.
+- Lifecycle logging (onStart, onTrimMemory, onLowMemory, etc.)
+- Heartbeat interval reduced to 10s for diagnostics.
+- .gitignore added, junk files removed from repo.
+- CI artifact name: tivimatelite-debug-apk -> app-debug.apk
+- All CI build fixes (Thread API, Kotlin internal, etc.) resolved.
+
+=== Architecture Notes ===
+- PlayerManager.kt: Singleton ExoPlayer (object), reflection-based audio params.
+- MainActivity.kt: All key handling, source switching, ready-stall watch.
+- FileLogStore.kt: File-based logging (not logcat-dependent).
+- AppLogStore.kt: In-memory ring buffer for web admin log viewer.
+- LocalAdminServer.kt: NanoHTTPD-based web admin (port 5220).
+- PlaylistStore.kt: Playlist source management (local/remote/custom).
+- RemotePlaylistRepository.kt: Remote source detection and fetching.
+- M3U8Parser.kt: Streaming M3U8 parser.
+- PlaybackHistoryStore.kt: Last channel persistence.
+
+=== Device-specific Notes ===
+- Hardware decoder: OMX.amlogic.hevc.decoder.awesome (S905L3)
+- Known logcat message: "SampleQueue.commitSample" IllegalArgumentException
+  triggers source switching. This is normal and handled.
+- 2GB RAM, plenty available even during playback.
+- Android 9 (SDK 28) — no special behavior observed beyond standard.
