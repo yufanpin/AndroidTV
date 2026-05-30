@@ -17,6 +17,7 @@ import com.tivimatelite.parser.M3U8Parser
 import com.tivimatelite.player.PlaybackHistoryStore
 import com.tivimatelite.player.PlayerManager
 import com.tivimatelite.web.AppLogStore
+import com.tivimatelite.web.FileLogStore
 import com.tivimatelite.web.LocalAdminServerManager
 import com.tivimatelite.web.PlaylistStore
 import java.io.FileNotFoundException
@@ -60,6 +61,7 @@ class MainActivity : AppCompatActivity() {
 
     private val playerListener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
+            FileLogStore.w(TAG, "onPlayerError: errorCode=${error.errorCode} ${error.localizedMessage}")
             cancelReadyStallWatch()
             if (tryForceHlsForCurrentSource(error)) return
             AppLogStore.w(TAG, "Playback error, trying next source", error)
@@ -67,6 +69,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
+            FileLogStore.i(TAG, "onPlaybackStateChanged: $playbackState")
             when (playbackState) {
                 Player.STATE_BUFFERING -> {
                     cancelReadyStallWatch()
@@ -85,10 +88,20 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        override fun onPlayerErrorChanged(error: PlaybackException?) {
+            FileLogStore.w(TAG, "onPlayerErrorChanged: ${error?.localizedMessage}")
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            FileLogStore.i(TAG, "onIsPlayingChanged: $isPlaying")
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        FileLogStore.init(this)
+        FileLogStore.i(TAG, "onCreate savedInstanceState=$savedInstanceState")
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -106,6 +119,7 @@ class MainActivity : AppCompatActivity() {
         loadChannels()
         startPlaylistWatcher()
         startNetworkSpeedMonitor()
+        startHeartbeat()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -164,12 +178,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        FileLogStore.i(TAG, "onStart")
+    }
+
     override fun onStop() {
+        FileLogStore.i(TAG, "onStop")
         super.onStop()
         PlayerManager.pause()
     }
 
     override fun onDestroy() {
+        FileLogStore.i(TAG, "onDestroy isFinishing=$isFinishing")
         binding.playerView.player?.removeListener(playerListener)
         binding.playerView.player = null
         backendInfoHideJob?.cancel()
@@ -190,6 +211,18 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+            FileLogStore.w(TAG, "onTrimMemory CRITICAL: $level")
+        }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        FileLogStore.w(TAG, "onLowMemory")
+    }
+
     private fun loadChannels() {
         scope.launch {
             val channels = loadChannelRows()
@@ -197,9 +230,13 @@ class MainActivity : AppCompatActivity() {
 
             if (channelGroups.isEmpty()) {
                 AppLogStore.e(TAG, "No channels available")
+                FileLogStore.e(TAG, "No channels available")
                 return@launch
             }
 
+            val msg = "Loaded ${channelGroups.size} channel groups"
+            AppLogStore.i(TAG, msg)
+            FileLogStore.i(TAG, msg)
             restoreLastPlayedChannel()
             playCurrentSource(resetAttempts = true)
         }
@@ -448,8 +485,11 @@ class MainActivity : AppCompatActivity() {
             PlayerManager.play(this, sourceUrl, forceHls)
             PlaybackHistoryStore.saveLastPlayedChannel(this, group.name, currentSourceIndex, sourceUrl)
             val modeSuffix = if (forceHls) " (forced HLS)" else ""
-            AppLogStore.i(TAG, "Playing ${group.name} source ${currentSourceIndex + 1}/${group.sources.size}$modeSuffix")
+            val msg = "Playing ${group.name} source ${currentSourceIndex + 1}/${group.sources.size}$modeSuffix"
+            AppLogStore.i(TAG, msg)
+            FileLogStore.i(TAG, msg)
         } catch (exception: Throwable) {
+            FileLogStore.e(TAG, "playCurrentSource failed", exception)
             AppLogStore.e(TAG, "playCurrentSource failed", exception)
             playNextSourceForCurrentChannel("play_call_failed")
         }
@@ -649,8 +689,21 @@ class MainActivity : AppCompatActivity() {
         val sources: List<String>
     )
 
+    private var heartbeatJob: Job? = null
+
+    private fun startHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = scope.launch {
+            while (true) {
+                delay(HEARTBEAT_INTERVAL_MS)
+                FileLogStore.i(TAG, "HEARTBEAT")
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "MainActivity"
+        private const val HEARTBEAT_INTERVAL_MS = 60000L
         private const val BACKEND_INFO_AUTO_HIDE_MS = 4000L
         private const val BUFFERING_FAILOVER_MS = 20000L
         private const val CHANNEL_ZAP_DEBOUNCE_MS = 300L
