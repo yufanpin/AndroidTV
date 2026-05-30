@@ -6,9 +6,12 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
 import com.tivimatelite.web.AppLogStore
@@ -20,6 +23,9 @@ object PlayerManager {
     private const val MAX_BUFFER_MS = 4_000
     private const val PLAYBACK_BUFFER_MS = 500
     private const val REBUFFER_MS = 1_000
+    private const val USER_AGENT = "TiviMateLite/1.0 (AndroidTV; ExoPlayer)"
+    private const val CONNECT_TIMEOUT_MS = 5_000
+    private const val READ_TIMEOUT_MS = 12_000
 
     @Volatile
     private var player: ExoPlayer? = null
@@ -64,8 +70,24 @@ object PlayerManager {
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(USER_AGENT)
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(CONNECT_TIMEOUT_MS)
+            .setReadTimeoutMs(READ_TIMEOUT_MS)
+            .setDefaultRequestProperties(
+                mapOf(
+                    "Accept" to "*/*",
+                    "Connection" to "keep-alive"
+                )
+            )
+
+        val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+
         return ExoPlayer.Builder(context)
             .setLoadControl(loadControl)
+            .setMediaSourceFactory(mediaSourceFactory)
             .build()
             .apply {
                 addListener(playbackListener)

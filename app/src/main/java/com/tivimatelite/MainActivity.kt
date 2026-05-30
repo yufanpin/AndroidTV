@@ -41,11 +41,13 @@ class MainActivity : AppCompatActivity() {
     private var bufferingFailoverJob: Job? = null
     private var playlistWatchJob: Job? = null
     private var reloadChannelsJob: Job? = null
+    private var readyStallWatchJob: Job? = null
     private var lastPlaylistFingerprint: String? = null
     private var activePlaylistSource = "local assets/channels.m3u"
 
     private val playerListener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
+            cancelReadyStallWatch()
             if (tryForceHlsForCurrentSource(error)) return
             AppLogStore.w(TAG, "Playback error, trying next source", error)
             playNextSourceForCurrentChannel("player_error")
@@ -53,9 +55,18 @@ class MainActivity : AppCompatActivity() {
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
-                Player.STATE_BUFFERING -> scheduleBufferingFailover()
-                Player.STATE_READY -> cancelBufferingFailover()
-                Player.STATE_ENDED -> playNextSourceForCurrentChannel("state_ended")
+                Player.STATE_BUFFERING -> {
+                    cancelReadyStallWatch()
+                    scheduleBufferingFailover()
+                }
+                Player.STATE_READY -> {
+                    cancelBufferingFailover()
+                    startReadyStallWatch()
+                }
+                Player.STATE_ENDED -> {
+                    cancelReadyStallWatch()
+                    playNextSourceForCurrentChannel("state_ended")
+                }
             }
         }
     }
@@ -124,6 +135,7 @@ class MainActivity : AppCompatActivity() {
         backendInfoHideJob?.cancel()
         playlistWatchJob?.cancel()
         reloadChannelsJob?.cancel()
+        cancelReadyStallWatch()
         cancelBufferingFailover()
         scope.cancel()
         if (isFinishing) {
@@ -293,6 +305,7 @@ class MainActivity : AppCompatActivity() {
         }
         attemptedSourceIndexes.add(currentSourceIndex)
         cancelBufferingFailover()
+        cancelReadyStallWatch()
 
         val sourceUrl = group.sources[currentSourceIndex]
         try {
@@ -309,7 +322,11 @@ class MainActivity : AppCompatActivity() {
     private fun playNextSourceForCurrentChannel(reason: String) {
         if (currentChannelIndex !in channelGroups.indices) return
         val group = channelGroups[currentChannelIndex]
-        if (group.sources.size < 2) return
+        if (group.sources.size < 2) {
+            AppLogStore.w(TAG, "Single-source channel failed, switching channel, reason=$reason")
+            switchChannel(1)
+            return
+        }
 
         for (offset in 1 until group.sources.size) {
             val candidateIndex = (currentSourceIndex + offset) % group.sources.size
@@ -338,6 +355,47 @@ class MainActivity : AppCompatActivity() {
     private fun cancelBufferingFailover() {
         bufferingFailoverJob?.cancel()
         bufferingFailoverJob = null
+    }
+
+    private fun startReadyStallWatch() {
+        cancelReadyStallWatch()
+        readyStallWatchJob = scope.launch {
+            val player = binding.playerView.player ?: return@launch
+            var lastPositionMs = player.currentPosition
+            var stagnantDurationMs = 0L
+
+            while (true) {
+                delay(READY_STALL_CHECK_INTERVAL_MS)
+                val currentPlayer = binding.playerView.player ?: return@launch
+
+                if (currentPlayer.playbackState != Player.STATE_READY || !currentPlayer.playWhenReady) {
+                    lastPositionMs = currentPlayer.currentPosition
+                    stagnantDurationMs = 0L
+                    continue
+                }
+
+                val currentPositionMs = currentPlayer.currentPosition
+                val isAdvancing = currentPositionMs > lastPositionMs + READY_STALL_ADVANCE_TOLERANCE_MS
+
+                if (isAdvancing) {
+                    lastPositionMs = currentPositionMs
+                    stagnantDurationMs = 0L
+                    continue
+                }
+
+                stagnantDurationMs += READY_STALL_CHECK_INTERVAL_MS
+                if (stagnantDurationMs < READY_STALL_TIMEOUT_MS) continue
+
+                AppLogStore.w(TAG, "Detected ready stall, trying next source")
+                playNextSourceForCurrentChannel("ready_stall")
+                return@launch
+            }
+        }
+    }
+
+    private fun cancelReadyStallWatch() {
+        readyStallWatchJob?.cancel()
+        readyStallWatchJob = null
     }
 
     private fun tryForceHlsForCurrentSource(error: PlaybackException): Boolean {
@@ -414,5 +472,8 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val BACKEND_INFO_AUTO_HIDE_MS = 4000L
         private const val BUFFERING_FAILOVER_MS = 10000L
+        private const val READY_STALL_CHECK_INTERVAL_MS = 2000L
+        private const val READY_STALL_TIMEOUT_MS = 10000L
+        private const val READY_STALL_ADVANCE_TOLERANCE_MS = 200L
     }
 }
