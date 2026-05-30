@@ -9,8 +9,10 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
@@ -86,10 +88,16 @@ object PlayerManager {
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
+        val audioSink = DefaultAudioSink.Builder(context)
+            .setEnableAudioTrackPlaybackParams(true)
+            .build()
+        val renderersFactory = DefaultRenderersFactory(context)
+            .setAudioSink(audioSink)
+
         return ExoPlayer.Builder(context)
             .setLoadControl(loadControl)
             .setMediaSourceFactory(mediaSourceFactory)
-            .experimentalSetEnableAudioTrackPlaybackParams(true)
+            .setRenderersFactory(renderersFactory)
             .build()
             .apply {
                 addListener(playbackListener)
