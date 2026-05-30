@@ -45,4 +45,5 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.github.bumptech.glide:glide:4.16.0")
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
 }

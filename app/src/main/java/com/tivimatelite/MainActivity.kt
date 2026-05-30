@@ -2,7 +2,6 @@ package com.tivimatelite
 
 import android.media.AudioManager
 import android.os.Bundle
-import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import androidx.annotation.OptIn
@@ -16,6 +15,8 @@ import com.tivimatelite.model.Channel
 import com.tivimatelite.parser.M3U8Parser
 import com.tivimatelite.player.PlaybackHistoryStore
 import com.tivimatelite.player.PlayerManager
+import com.tivimatelite.web.AppLogStore
+import com.tivimatelite.web.LocalAdminServerManager
 import java.io.FileNotFoundException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
@@ -40,7 +41,7 @@ class MainActivity : AppCompatActivity() {
 
     private val playerListener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
-            Log.w(TAG, "Playback error, trying next source", error)
+            AppLogStore.w(TAG, "Playback error, trying next source", error)
             playNextSourceForCurrentChannel("player_error")
         }
 
@@ -57,6 +58,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        LocalAdminServerManager.start(this)
+        AppLogStore.i(TAG, "Admin ready at ${LocalAdminServerManager.getAdminUrl()}")
 
         audioManager = getSystemService(AudioManager::class.java)
 
@@ -112,7 +116,10 @@ class MainActivity : AppCompatActivity() {
         backendInfoHideJob?.cancel()
         cancelBufferingFailover()
         scope.cancel()
-        if (isFinishing) PlayerManager.release()
+        if (isFinishing) {
+            PlayerManager.release()
+            LocalAdminServerManager.stop()
+        }
         super.onDestroy()
     }
 
@@ -122,7 +129,7 @@ class MainActivity : AppCompatActivity() {
             channelGroups = groupChannels(channels)
 
             if (channelGroups.isEmpty()) {
-                Log.e(TAG, "No channels available")
+                AppLogStore.e(TAG, "No channels available")
                 return@launch
             }
 
@@ -135,7 +142,7 @@ class MainActivity : AppCompatActivity() {
         val remoteResult = RemotePlaylistRepository.loadChannels()
         if (remoteResult != null) {
             activePlaylistSource = remoteResult.sourceUrl
-            Log.i(TAG, "Loaded channels from remote backend: ${remoteResult.sourceUrl}")
+            AppLogStore.i(TAG, "Loaded channels from remote backend: ${remoteResult.sourceUrl}")
             return remoteResult.channels
         }
 
@@ -145,10 +152,10 @@ class MainActivity : AppCompatActivity() {
             assets.open("channels.m3u").use { input ->
                 M3U8Parser.parse(input).collect { channel -> channels.add(channel) }
             }
-            Log.i(TAG, "Loaded channels from local asset")
+            AppLogStore.i(TAG, "Loaded channels from local asset")
             channels
         } catch (exception: FileNotFoundException) {
-            Log.w(TAG, "channels.m3u asset not found", exception)
+            AppLogStore.w(TAG, "channels.m3u asset not found", exception)
             emptyList()
         }
     }
@@ -218,9 +225,9 @@ class MainActivity : AppCompatActivity() {
         try {
             PlayerManager.play(this, sourceUrl)
             PlaybackHistoryStore.saveLastPlayedChannel(this, group.name, currentSourceIndex, sourceUrl)
-            Log.i(TAG, "Playing ${group.name} source ${currentSourceIndex + 1}/${group.sources.size}")
+            AppLogStore.i(TAG, "Playing ${group.name} source ${currentSourceIndex + 1}/${group.sources.size}")
         } catch (exception: Throwable) {
-            Log.e(TAG, "playCurrentSource failed", exception)
+            AppLogStore.e(TAG, "playCurrentSource failed", exception)
             playNextSourceForCurrentChannel("play_call_failed")
         }
     }
@@ -234,13 +241,13 @@ class MainActivity : AppCompatActivity() {
             val candidateIndex = (currentSourceIndex + offset) % group.sources.size
             if (attemptedSourceIndexes.contains(candidateIndex)) continue
 
-            Log.w(TAG, "Switching source for ${group.name}, reason=$reason, to index=$candidateIndex")
+            AppLogStore.w(TAG, "Switching source for ${group.name}, reason=$reason, to index=$candidateIndex")
             currentSourceIndex = candidateIndex
             playCurrentSource(resetAttempts = false)
             return
         }
 
-        Log.e(TAG, "All sources failed for channel: ${group.name}")
+        AppLogStore.e(TAG, "All sources failed for channel: ${group.name}")
     }
 
     private fun scheduleBufferingFailover() {
@@ -278,12 +285,15 @@ class MainActivity : AppCompatActivity() {
             append("Detected IP: ")
             append(probe.localIp ?: "unknown")
             append('\n')
+            append("Admin URL: ")
+            append(LocalAdminServerManager.getAdminUrl())
+            append('\n')
             append("Active source: ")
             append(activePlaylistSource)
         }
 
         binding.backendInfoText.text = text
-        Log.i(TAG, text.replace('\n', ' '))
+        AppLogStore.i(TAG, text.replace('\n', ' '))
         binding.backendInfoText.visibility = View.VISIBLE
 
         backendInfoHideJob?.cancel()

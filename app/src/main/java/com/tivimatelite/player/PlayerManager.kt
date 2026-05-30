@@ -1,7 +1,6 @@
 package com.tivimatelite.player
 
 import android.content.Context
-import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -11,6 +10,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
+import com.tivimatelite.web.AppLogStore
 
 @UnstableApi
 object PlayerManager {
@@ -70,11 +70,11 @@ object PlayerManager {
     private val playbackListener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
             if (isCodecFailure(error)) {
-                Log.e(TAG, "Hardware decoder failure captured", error)
+                AppLogStore.e(TAG, "Hardware decoder failure captured", error)
                 player?.stop()
                 return
             }
-            Log.e(TAG, "Playback error captured", error)
+            AppLogStore.e(TAG, "Playback error captured", error)
         }
     }
 
@@ -86,7 +86,7 @@ object PlayerManager {
             error: java.io.IOException,
             wasCanceled: Boolean
         ) {
-            Log.w(TAG, "Stream load error captured", error)
+            AppLogStore.w(TAG, "Stream load error captured", error)
         }
     }
 

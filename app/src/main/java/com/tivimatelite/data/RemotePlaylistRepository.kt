@@ -4,6 +4,8 @@ import android.util.Log
 import com.tivimatelite.BuildConfig
 import com.tivimatelite.model.Channel
 import com.tivimatelite.parser.M3U8Parser
+import com.tivimatelite.web.AppLogStore
+import com.tivimatelite.web.LocalAdminServerManager
 import java.net.HttpURLConnection
 import java.net.Inet4Address
 import java.net.NetworkInterface
@@ -38,6 +40,7 @@ object RemotePlaylistRepository {
             val channels = loadFromUrl(url)
             if (!channels.isNullOrEmpty()) {
                 updateProbeInfo(urls, url)
+                AppLogStore.i(TAG, "Remote playlist loaded from $url")
                 return@withContext RemotePlaylistResult(
                     sourceUrl = url,
                     channels = channels
@@ -59,14 +62,7 @@ object RemotePlaylistRepository {
             result.add(configured)
         }
 
-        val localIp = resolveLocalIpv4Address()
-        if (localIp != null) {
-            result.add("http://$localIp:$BACKEND_PORT/channels.m3u")
-            result.add("http://$localIp:$BACKEND_PORT")
-        }
-
-        result.add("http://127.0.0.1:$BACKEND_PORT/channels.m3u")
-        result.add("http://127.0.0.1:$BACKEND_PORT")
+        result.addAll(LocalAdminServerManager.getPlaylistUrlCandidates())
         return result.toList()
     }
 
@@ -96,6 +92,7 @@ object RemotePlaylistRepository {
             }
         }.onFailure {
             Log.w(TAG, "Remote playlist load failed for $url", it)
+            AppLogStore.w(TAG, "Remote playlist load failed for $url", it)
         }.getOrNull()
     }
 
