@@ -1,10 +1,8 @@
 package com.tivimatelite.web
 
 import android.content.Context
-import java.net.HttpURLConnection
 import java.net.Inet4Address
 import java.net.NetworkInterface
-import java.net.URL
 import java.util.Collections
 
 object LocalAdminServerManager {
@@ -25,7 +23,6 @@ object LocalAdminServerManager {
         runCatching {
             val created = LocalAdminServer(context.applicationContext, PORT)
             created.start(2000, false)
-            verifyServerReachable()
             server = created
             lastStartError = null
             AppLogStore.i(TAG, "Local admin server started on port $PORT")
@@ -77,15 +74,5 @@ object LocalAdminServerManager {
             add("http://127.0.0.1:$PORT/channels.m3u")
             add("http://127.0.0.1:$PORT/playlist")
         }
-    }
-
-    private fun verifyServerReachable() {
-        val connection = (URL("http://127.0.0.1:$PORT/").openConnection() as HttpURLConnection).apply {
-            connectTimeout = 1500
-            readTimeout = 1500
-            requestMethod = "GET"
-            useCaches = false
-        }
-        connection.inputStream.use { }
     }
 }
