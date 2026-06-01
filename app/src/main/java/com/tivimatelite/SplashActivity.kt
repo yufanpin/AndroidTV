@@ -28,16 +28,15 @@ class SplashActivity : AppCompatActivity() {
     }
 
     private fun playSplashAnimation() {
-        binding.splashContent.alpha = 0.2f
-        binding.splashContent.scaleX = 0.92f
-        binding.splashContent.scaleY = 0.92f
         binding.splashContent.visibility = View.VISIBLE
-        binding.splashContent.animate()
-            .alpha(1f)
-            .scaleX(1f)
-            .scaleY(1f)
-            .setDuration(420)
-            .start()
+        binding.splashContent.post {
+            binding.splashContent.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(420)
+                .start()
+        }
     }
 
     private fun openMainWithDelay() {
