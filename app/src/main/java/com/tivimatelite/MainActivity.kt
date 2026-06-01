@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import com.tivimatelite.data.RemotePlaylistRepository
 import com.tivimatelite.databinding.ActivityMainBinding
 import com.tivimatelite.input.InputHandler
 import com.tivimatelite.loader.ChannelGroup
