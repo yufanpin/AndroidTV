@@ -1,0 +1,63 @@
+{
+  "schema_version": 2,
+  "active_work_id": "optimize-p0-p1-fbc73eb0",
+  "works": {
+    "optimize-p0-p1-fbc73eb0": {
+      "work_id": "optimize-p0-p1-fbc73eb0",
+      "active_plan": "C:\\Users\\yu\\Desktop\\github仓库\\AndroidTV\\.omo\\plans\\optimize-p0-p1.md",
+      "plan_name": "optimize-p0-p1",
+      "status": "active",
+      "started_at": "2026-06-01T04:02:48.980Z",
+      "updated_at": "2026-06-01T04:28:52.276Z",
+      "session_ids": [
+        "opencode:ses_17ec607acffez5Czizejceafif"
+      ],
+      "session_origins": {
+        "opencode:ses_17ec607acffez5Czizejceafif": "direct"
+      },
+      "agent": "atlas",
+      "task_sessions": {
+        "todo:1": {
+          "task_key": "todo:1",
+          "task_label": "1",
+          "task_title": "建立测试基础设施 (build.gradle.kts + CI YAML + 目录结构)",
+          "session_id": "opencode:ses_17e953575ffeYfWjfezNzQW11s",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "updated_at": "2026-06-01T04:28:52.276Z",
+          "started_at": "2026-06-01T04:28:09.079Z",
+          "status": "completed",
+          "ended_at": "2026-06-01T04:28:52.274Z",
+          "elapsed_ms": 43195
+        }
+      }
+    }
+  },
+  "active_plan": "C:\\Users\\yu\\Desktop\\github仓库\\AndroidTV\\.omo\\plans\\optimize-p0-p1.md",
+  "started_at": "2026-06-01T04:02:48.980Z",
+  "status": "active",
+  "updated_at": "2026-06-01T04:28:52.276Z",
+  "session_ids": [
+    "opencode:ses_17ec607acffez5Czizejceafif"
+  ],
+  "session_origins": {
+    "opencode:ses_17ec607acffez5Czizejceafif": "direct"
+  },
+  "plan_name": "optimize-p0-p1",
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "建立测试基础设施 (build.gradle.kts + CI YAML + 目录结构)",
+      "session_id": "opencode:ses_17e953575ffeYfWjfezNzQW11s",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-06-01T04:28:52.276Z",
+      "started_at": "2026-06-01T04:28:09.079Z",
+      "status": "completed",
+      "ended_at": "2026-06-01T04:28:52.274Z",
+      "elapsed_ms": 43195
+    }
+  },
+  "agent": "atlas"
+}
