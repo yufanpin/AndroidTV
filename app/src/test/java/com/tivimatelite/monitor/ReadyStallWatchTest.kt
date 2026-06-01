@@ -19,11 +19,10 @@ class ReadyStallWatchTest {
     @Test
     fun `heartbeat logs every ten seconds`() = runTest {
         val logs = mutableListOf<String>()
-        var nowMs = 0L
         val watch = ReadyStallWatch(
             scope = this,
             getPlayerSnapshot = { PlayerSnapshot(false, false, 0L) },
-            getNowMs = { nowMs },
+            getNowMs = { testScheduler.currentTime },
             getTotalRxBytes = { 0L },
             getPlaylistFingerprint = { "same" },
             onPlaylistChanged = {},
@@ -35,20 +34,18 @@ class ReadyStallWatchTest {
 
         watch.startHeartbeat()
         advanceTimeBy(9999)
-        nowMs = 9999L
         runCurrent()
         assertTrue(logs.isEmpty())
 
         advanceTimeBy(1)
-        nowMs = 10000L
         runCurrent()
         assertEquals(listOf("HEARTBEAT"), logs)
+        watch.cancel()
     }
 
     @Test
     fun `playlist watcher and ready stall detection keep existing timing semantics`() = runTest {
         var fingerprint = "a"
-        var nowMs = 0L
         val playlistChanges = mutableListOf<Unit>()
         val stallSignals = mutableListOf<String>()
         var snapshot = PlayerSnapshot(isReady = true, playWhenReady = true, currentPositionMs = 1000L)
@@ -56,7 +53,7 @@ class ReadyStallWatchTest {
         val watch = ReadyStallWatch(
             scope = this,
             getPlayerSnapshot = { snapshot },
-            getNowMs = { nowMs },
+            getNowMs = { testScheduler.currentTime },
             getTotalRxBytes = { 0L },
             getPlaylistFingerprint = { fingerprint },
             onPlaylistChanged = { playlistChanges += Unit },
@@ -78,12 +75,11 @@ class ReadyStallWatchTest {
         watch.setReadyStallIgnoreUntilMs(60000L)
         watch.startReadyStallWatch(lastRecoveryAtMs = 0L)
         advanceTimeBy(60000)
-        nowMs = 60000L
         runCurrent()
         snapshot = snapshot.copy(currentPositionMs = 1000L)
         advanceTimeBy(300000)
-        nowMs = 360000L
         runCurrent()
         assertEquals(listOf("ready_stall"), stallSignals)
+        watch.cancel()
     }
 }

@@ -13,7 +13,7 @@ class ChannelAdapterTest {
             ?.bufferedReader()?.readText()
             ?: // Fallback: read from source tree (works in IDE / local test)
             java.io.File(
-                "app/src/main/java/com/tivimatelite/ui/ChannelAdapter.kt"
+                "src/main/java/com/tivimatelite/ui/ChannelAdapter.kt"
             ).readText()
 
         assertTrue(
@@ -26,7 +26,7 @@ class ChannelAdapterTest {
     @Test
     fun logoOptions_unchanged() {
         val source = java.io.File(
-            "app/src/main/java/com/tivimatelite/ui/ChannelAdapter.kt"
+            "src/main/java/com/tivimatelite/ui/ChannelAdapter.kt"
         ).readText()
 
         assertTrue("override(64, 64)", source.contains(".override(64, 64)"))

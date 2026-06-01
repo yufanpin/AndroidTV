@@ -69,7 +69,8 @@ class InputHandlerTest {
             channelCountProvider = { 3 },
             onChannelRequest = requests::add,
             showOverlay = overlays::add,
-            hideOverlay = {}
+            hideOverlay = {},
+            onOutOfRange = {}
         )
 
         assertTrue(handler.handleNumericKey(KeyEvent.KEYCODE_0))
