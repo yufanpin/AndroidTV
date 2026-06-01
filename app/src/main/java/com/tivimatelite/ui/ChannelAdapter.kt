@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.RequestManager
 import com.bumptech.glide.load.DecodeFormat
 import com.bumptech.glide.request.RequestOptions
+import com.tivimatelite.R
 import com.tivimatelite.databinding.ItemChannelBinding
 import com.tivimatelite.model.Channel
 
@@ -98,6 +99,7 @@ class ChannelAdapter(
                 requestManager
                     .load(channel.logoUrl)
                     .apply(LOGO_OPTIONS)
+                    .error(R.drawable.ic_channel_fallback)
                     .into(binding.channelLogo)
             } else {
                 requestManager.clear(binding.channelLogo)
