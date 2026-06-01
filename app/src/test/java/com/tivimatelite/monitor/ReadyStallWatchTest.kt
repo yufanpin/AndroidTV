@@ -19,10 +19,11 @@ class ReadyStallWatchTest {
     @Test
     fun `heartbeat logs every ten seconds`() = runTest {
         val logs = mutableListOf<String>()
+        var nowMs = 0L
         val watch = ReadyStallWatch(
             scope = this,
             getPlayerSnapshot = { PlayerSnapshot(false, false, 0L) },
-            getNowMs = { currentTime },
+            getNowMs = { nowMs },
             getTotalRxBytes = { 0L },
             getPlaylistFingerprint = { "same" },
             onPlaylistChanged = {},
@@ -34,10 +35,12 @@ class ReadyStallWatchTest {
 
         watch.startHeartbeat()
         advanceTimeBy(9999)
+        nowMs = 9999L
         runCurrent()
         assertTrue(logs.isEmpty())
 
         advanceTimeBy(1)
+        nowMs = 10000L
         runCurrent()
         assertEquals(listOf("HEARTBEAT"), logs)
     }

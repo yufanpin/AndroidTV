@@ -2,7 +2,7 @@ package com.tivimatelite.parser
 
 import com.tivimatelite.model.Channel
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.runTest
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
