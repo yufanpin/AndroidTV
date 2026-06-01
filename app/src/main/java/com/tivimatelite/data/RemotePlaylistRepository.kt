@@ -4,13 +4,12 @@ import android.util.Log
 import com.tivimatelite.BuildConfig
 import com.tivimatelite.model.Channel
 import com.tivimatelite.parser.M3U8Parser
+import com.tivimatelite.util.HttpFetcher
 import com.tivimatelite.web.AppLogStore
 import com.tivimatelite.web.LocalAdminServerManager
-import java.net.HttpURLConnection
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.net.SocketException
-import java.net.URL
 import java.util.Collections
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
@@ -18,8 +17,6 @@ import kotlinx.coroutines.withContext
 
 object RemotePlaylistRepository {
     private const val TAG = "RemotePlaylistRepo"
-    private const val CONNECT_TIMEOUT_MS = 3500
-    private const val READ_TIMEOUT_MS = 7000
 
     @Volatile
     private var lastProbeInfo = PlaylistProbeInfo(
@@ -77,12 +74,7 @@ object RemotePlaylistRepository {
 
     private suspend fun loadFromUrl(url: String): LoadedRemotePlaylist? = withContext(Dispatchers.IO) {
         runCatching {
-            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                requestMethod = "GET"
-                useCaches = false
-            }
+            val connection = HttpFetcher.openConnection(url)
             val activeSourceLabel = connection.getHeaderField("X-Playlist-Active")
 
             connection.inputStream.use { input ->

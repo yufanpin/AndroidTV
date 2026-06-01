@@ -2,10 +2,9 @@ package com.tivimatelite.web
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.tivimatelite.util.HttpFetcher
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.UUID
 
 object PlaylistStore {
@@ -16,9 +15,6 @@ object PlaylistStore {
 
     private const val MODE_BUILTIN = "builtin"
     private const val MODE_CUSTOM = "custom"
-
-    private const val CONNECT_TIMEOUT_MS = 3500
-    private const val READ_TIMEOUT_MS = 7000
 
     data class CustomSource(
         val id: String,
@@ -138,13 +134,10 @@ object PlaylistStore {
 
     private fun loadFromUrl(url: String): String? {
         return runCatching {
-            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                requestMethod = "GET"
-                useCaches = false
-            }
+            val connection = HttpFetcher.openConnection(url)
             connection.inputStream.bufferedReader().use { it.readText() }
+        }.onFailure {
+            AppLogStore.w("PlaylistStore", "Custom source fetch failed for $url", it)
         }.getOrNull()
     }
 
