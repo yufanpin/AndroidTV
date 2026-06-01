@@ -120,64 +120,75 @@ class LocalAdminServer(
                 <title>TiviMateLite 后台</title>
                 <style>
                   body { font-family: sans-serif; background: #111; color: #fff; margin: 24px; }
-                  input, button { padding: 8px; }
+                  input, textarea, button { padding: 8px; box-sizing: border-box; }
+                  textarea { resize: vertical; }
                   table { width: 100%; border-collapse: collapse; margin-top: 10px; }
                   th, td { border: 1px solid #333; padding: 8px; vertical-align: top; }
                   th { background: #1a1a1a; }
                   a { color: #8ecbff; }
                   .box { border: 1px solid #333; padding: 12px; margin-top: 12px; }
+                  details.box summary { cursor: pointer; font-weight: bold; }
+                  .hint { color: #B3FFFFFF; font-size: 13px; margin: 0 0 10px 0; }
                 </style>
               </head>
               <body>
                 <h2>TiviMateLite 本地后台</h2>
                 <p><b>当前生效源：</b>${escapeHtml(effective.activeSourceLabel)}</p>
 
-                <div class="box">
-                  <h3>源模式</h3>
-                  <form action="/mode" method="post">
+                <details class="box" open>
+                  <summary>源模式</summary>
+                  <form action="/mode" method="post" style="margin-top:12px;">
                     <label><input type="radio" name="mode" value="builtin" ${if (!isCustom) "checked" else ""}/> 使用内置源</label><br/>
                     <label><input type="radio" name="mode" value="custom" ${if (isCustom) "checked" else ""}/> 使用自定义源</label><br/><br/>
                     <button type="submit">保存模式</button>
                   </form>
-                </div>
+                </details>
 
-                <div class="box">
-                  <h3>添加自定义源</h3>
-                  <form action="/source/add" method="post">
-                    <input type="text" name="name" placeholder="源名称" style="width:220px"/>
-                    <input type="text" name="url" placeholder="http://.../channels.m3u" style="width:420px"/>
-                    <button type="submit">添加</button>
-                  </form>
-                </div>
+                <details class="box" open>
+                  <summary>添加自定义源（URL 方式）</summary>
+                  <div style="margin-top:12px;">
+                    <p class="hint">直接填写一个远程 M3U 地址。</p>
+                    <form action="/source/add" method="post">
+                      <input type="text" name="name" placeholder="源名称" style="width:220px"/>
+                      <input type="text" name="url" placeholder="http://.../channels.m3u" style="width:420px"/>
+                      <button type="submit">添加</button>
+                    </form>
+                  </div>
+                </details>
 
-                <div class="box">
-                  <h3>直接粘贴直播源内容</h3>
-                  <form action="/source/add-content" method="post">
-                    <input type="text" name="name" placeholder="源名称" style="width:220px"/><br/><br/>
-                    <textarea name="content" rows="10" style="width:100%;font-family:monospace;" placeholder="#EXTM3U ..."></textarea><br/><br/>
-                    <button type="submit">添加粘贴源</button>
-                  </form>
-                </div>
+                <details class="box">
+                  <summary>直接粘贴直播源内容（可选方式）</summary>
+                  <div style="margin-top:12px;">
+                    <p class="hint">这是可选方式。你也可以继续只用上面的 URL 添加方式。</p>
+                    <form action="/source/add-content" method="post">
+                      <input type="text" name="name" placeholder="源名称" style="width:220px"/><br/><br/>
+                      <textarea name="content" rows="10" style="width:100%;font-family:monospace;" placeholder="#EXTM3U ..."></textarea><br/><br/>
+                      <button type="submit">添加粘贴源</button>
+                    </form>
+                  </div>
+                </details>
 
-                <div class="box">
-                  <h3>自定义源列表（勾选即启用）</h3>
-                  <table>
-                    <thead><tr><th>启用</th><th>名称</th><th>地址</th><th>操作</th></tr></thead>
-                    <tbody>
-                      $rows
-                    </tbody>
-                  </table>
-                </div>
+                <details class="box" open>
+                  <summary>自定义源列表（${sources.size} 个）</summary>
+                  <div style="margin-top:12px;">
+                    <table>
+                      <thead><tr><th>启用</th><th>名称</th><th>地址</th><th>操作</th></tr></thead>
+                      <tbody>
+                        $rows
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
 
-                <div class="box">
-                  <h3>系统</h3>
-                  <form action="/boot/toggle" method="post">
+                <details class="box">
+                  <summary>系统（${if (autoStartEnabled) "已开启" else "已关闭"}）</summary>
+                  <form action="/boot/toggle" method="post" style="margin-top:12px;">
                     <label>
                       <input type="checkbox" name="enabled" value="1" ${if (autoStartEnabled) "checked" else ""} onchange="this.form.submit()"/>
                       开机自动启动 App
                     </label>
                   </form>
-                </div>
+                </details>
 
                 <p><a href="/logs">查看应用日志</a></p>
               </body>
