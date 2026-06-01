@@ -98,7 +98,7 @@ class ChannelSwitcherTest {
         nowMs += 20000L
         switcher.playCurrentSource(resetAttempts = true)
         switcher.playNextSourceForCurrentChannel("single_source")
-        advanceTimeBy(8000)
+        advanceTimeBy(5000)
         runCurrent()
         assertTrue(warnings.any { it.contains("Single-source retry") })
         assertEquals(listOf(0 to false, 1 to false, 0 to false, 0 to false), plays)
@@ -138,13 +138,13 @@ class ChannelSwitcherTest {
         assertFalse(switcher.tryForceHlsForCurrentSource(RuntimeException("UnrecognizedInputFormatException")))
 
         switcher.scheduleBufferingFailover()
-        advanceTimeBy(20000)
+        advanceTimeBy(35000)
         runCurrent()
         assertEquals(listOf(0 to false, 0 to true, 1 to false), plays)
 
         buffering = false
         switcher.scheduleBufferingFailover()
-        advanceTimeBy(20000)
+        advanceTimeBy(35000)
         runCurrent()
         assertEquals(listOf(0 to false, 0 to true, 1 to false), plays)
         assertTrue(warnings.any { it.contains("Retrying as HLS") })

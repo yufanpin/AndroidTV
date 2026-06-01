@@ -200,10 +200,10 @@ class ChannelSwitcher(
 
     companion object {
         private const val CHANNEL_ZAP_DEBOUNCE_MS = 300L
-        private const val BUFFERING_FAILOVER_MS = 20000L
-        private const val SINGLE_SOURCE_RETRY_BASE_MS = 8000L
-        private const val SINGLE_SOURCE_RETRY_MAX_MS = 20000L
-        private const val SINGLE_SOURCE_RETRY_MIN_GAP_MS = 10000L
-        private const val SINGLE_SOURCE_RETRY_MAX_COUNT = 5
+        private const val BUFFERING_FAILOVER_MS = 35000L
+        private const val SINGLE_SOURCE_RETRY_BASE_MS = 5000L
+        private const val SINGLE_SOURCE_RETRY_MAX_MS = 15000L
+        private const val SINGLE_SOURCE_RETRY_MIN_GAP_MS = 12000L
+        private const val SINGLE_SOURCE_RETRY_MAX_COUNT = 3
     }
 }
