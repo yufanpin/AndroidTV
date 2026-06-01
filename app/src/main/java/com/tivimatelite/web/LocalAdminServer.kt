@@ -41,6 +41,11 @@ class LocalAdminServer(
         }
 
         return when (session.uri) {
+            "/boot/toggle" -> {
+                val enabled = session.parameters["enabled"]?.firstOrNull() == "1"
+                BootPrefs.setAutoStartEnabled(appContext, enabled)
+                redirect("/")
+            }
             "/mode" -> {
                 val mode = session.parameters["mode"]?.firstOrNull().orEmpty()
                 if (mode == "custom") PlaylistStore.setModeCustom(appContext) else PlaylistStore.setModeBuiltin(appContext)
@@ -50,6 +55,12 @@ class LocalAdminServer(
                 val name = session.parameters["name"]?.firstOrNull().orEmpty()
                 val url = session.parameters["url"]?.firstOrNull().orEmpty()
                 PlaylistStore.addCustomSource(appContext, name, url)
+                redirect("/")
+            }
+            "/source/add-content" -> {
+                val name = session.parameters["name"]?.firstOrNull().orEmpty()
+                val content = session.parameters["content"]?.firstOrNull().orEmpty()
+                PlaylistStore.addCustomSourceWithContent(appContext, name, content)
                 redirect("/")
             }
             "/source/select" -> {
@@ -83,6 +94,7 @@ class LocalAdminServer(
     }
 
     private fun buildHomePage(): String {
+        val autoStartEnabled = BootPrefs.isAutoStartEnabled(appContext)
         val isCustom = PlaylistStore.isCustomMode(appContext)
         val selectedId = PlaylistStore.getSelectedSourceId(appContext)
         val sources = PlaylistStore.getCustomSources(appContext)
@@ -139,6 +151,15 @@ class LocalAdminServer(
                 </div>
 
                 <div class="box">
+                  <h3>直接粘贴直播源内容</h3>
+                  <form action="/source/add-content" method="post">
+                    <input type="text" name="name" placeholder="源名称" style="width:220px"/><br/><br/>
+                    <textarea name="content" rows="10" style="width:100%;font-family:monospace;" placeholder="#EXTM3U ..."></textarea><br/><br/>
+                    <button type="submit">添加粘贴源</button>
+                  </form>
+                </div>
+
+                <div class="box">
                   <h3>自定义源列表（勾选即启用）</h3>
                   <table>
                     <thead><tr><th>启用</th><th>名称</th><th>地址</th><th>操作</th></tr></thead>
@@ -146,6 +167,16 @@ class LocalAdminServer(
                       $rows
                     </tbody>
                   </table>
+                </div>
+
+                <div class="box">
+                  <h3>系统</h3>
+                  <form action="/boot/toggle" method="post">
+                    <label>
+                      <input type="checkbox" name="enabled" value="1" ${if (autoStartEnabled) "checked" else ""} onchange="this.form.submit()"/>
+                      开机自动启动 App
+                    </label>
+                  </form>
                 </div>
 
                 <p><a href="/logs">查看应用日志</a></p>
