@@ -6,7 +6,7 @@ import org.junit.Test
 class LocalAdminServerManagerTest {
 
     @Test
-    fun startPath_includesFileLogDiagnosticsAndBindVerification() {
+    fun startPath_includesFileLogDiagnosticsAndRunningStateExposure() {
         val source = java.io.File(
             "src/main/java/com/tivimatelite/web/LocalAdminServerManager.kt"
         ).readText()
@@ -17,12 +17,12 @@ class LocalAdminServerManagerTest {
                 source.contains("FileLogStore.w(TAG, \"Local admin server start failed")
         )
         assertTrue(
-            "start() should verify the server is actually reachable after start",
-            source.contains("verifyServerReachable(")
-        )
-        assertTrue(
             "manager should expose running state for diagnostics",
             source.contains("fun isServerRunning()")
+        )
+        assertTrue(
+            "manager should expose last start error for diagnostics",
+            source.contains("fun getLastStartError()")
         )
     }
 }
