@@ -19,10 +19,10 @@ import com.tivimatelite.web.AppLogStore
 
 object PlayerManager {
     private const val TAG = "PlayerManager"
-    private const val MIN_BUFFER_MS = 5_000
-    private const val MAX_BUFFER_MS = 20_000
-    private const val PLAYBACK_BUFFER_MS = 2_000
-    private const val REBUFFER_MS = 5_000
+    private const val MIN_BUFFER_MS = 15_000
+    private const val MAX_BUFFER_MS = 45_000
+    private const val PLAYBACK_BUFFER_MS = 3_000
+    private const val REBUFFER_MS = 8_000
     private const val USER_AGENT = "TiviMateLite/1.0 (AndroidTV; ExoPlayer)"
     private const val CONNECT_TIMEOUT_MS = 5_000
     private const val READ_TIMEOUT_MS = 12_000
