@@ -1,8 +1,10 @@
 package com.tivimatelite.web
 
 import android.content.Context
+import java.net.HttpURLConnection
 import java.net.Inet4Address
 import java.net.NetworkInterface
+import java.net.URL
 import java.util.Collections
 
 object LocalAdminServerManager {
@@ -12,16 +14,26 @@ object LocalAdminServerManager {
     @Volatile
     private var server: LocalAdminServer? = null
 
+    @Volatile
+    private var lastStartError: String? = null
+
     fun start(context: Context) {
         if (server != null) return
+
+        FileLogStore.i(TAG, "Starting local admin server on port $PORT")
 
         runCatching {
             val created = LocalAdminServer(context.applicationContext, PORT)
             created.start(2000, false)
+            verifyServerReachable()
             server = created
+            lastStartError = null
             AppLogStore.i(TAG, "Local admin server started on port $PORT")
+            FileLogStore.i(TAG, "Local admin server started on port $PORT")
         }.onFailure {
+            lastStartError = it.message ?: it.javaClass.simpleName
             AppLogStore.e(TAG, "Local admin server start failed", it)
+            FileLogStore.w(TAG, "Local admin server start failed", it)
         }
     }
 
@@ -29,9 +41,14 @@ object LocalAdminServerManager {
         server?.stop()
         server = null
         AppLogStore.i(TAG, "Local admin server stopped")
+        FileLogStore.i(TAG, "Local admin server stopped")
     }
 
     fun getPort(): Int = PORT
+
+    fun isServerRunning(): Boolean = server != null
+
+    fun getLastStartError(): String? = lastStartError
 
     fun getLocalIpv4Address(): String? {
         return runCatching {
@@ -60,5 +77,15 @@ object LocalAdminServerManager {
             add("http://127.0.0.1:$PORT/channels.m3u")
             add("http://127.0.0.1:$PORT/playlist")
         }
+    }
+
+    private fun verifyServerReachable() {
+        val connection = (URL("http://127.0.0.1:$PORT/").openConnection() as HttpURLConnection).apply {
+            connectTimeout = 1500
+            readTimeout = 1500
+            requestMethod = "GET"
+            useCaches = false
+        }
+        connection.inputStream.use { }
     }
 }
