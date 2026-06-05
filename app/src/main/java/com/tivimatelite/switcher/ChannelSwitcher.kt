@@ -1,6 +1,7 @@
 package com.tivimatelite.switcher
 
 import com.tivimatelite.loader.ChannelGroup
+import com.tivimatelite.player.PlayableHostStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -22,7 +23,9 @@ class ChannelSwitcher(
     private val logWarning: (String) -> Unit,
     private val logError: (String) -> Unit,
     private val getNowMs: () -> Long,
-    private val isPlayerBufferingAndPlaying: () -> Boolean
+    private val isPlayerBufferingAndPlaying: () -> Boolean,
+    // P0: 智能线路记忆 - 获取可播放域名集合
+    private val getPlayableHosts: () -> Set<String> = { emptySet() }
 ) {
     private val attemptedSourceIndexes = HashSet<Int>(8)
     private val hlsRetriedSourceIndexes = HashSet<Int>(8)
@@ -32,6 +35,8 @@ class ChannelSwitcher(
     private var switchDebounceJob: Job? = null
     private var singleSourceRetryJob: Job? = null
     private var bufferingFailoverJob: Job? = null
+    // P2: 15s 加载超时计时器
+    private var loadTimeoutJob: Job? = null
 
     fun requestSwitchByDelta(delta: Int) {
         val channelGroups = getChannelGroups()
@@ -54,7 +59,9 @@ class ChannelSwitcher(
         val channelGroups = getChannelGroups()
         if (channelGroups.isEmpty()) return
         setCurrentChannelIndex(targetIndex.coerceIn(0, channelGroups.lastIndex))
-        setCurrentSourceIndex(0)
+        // P0: 优先选择记忆中可播放的域名
+        val preferredSourceIdx = findPreferredSourceIndex(channelGroups[getCurrentChannelIndex()])
+        setCurrentSourceIndex(preferredSourceIdx)
         showChannelNumberOverlay((getCurrentChannelIndex() + 1).toString())
         playCurrentSource(resetAttempts = true)
     }
@@ -73,11 +80,18 @@ class ChannelSwitcher(
             singleSourceRetryCount = 0
             lastSingleSourceRetryAtMs = 0L
             singleSourceRetryJob?.cancel()
+            // P0: 重置时重新排优先序
+            val preferredIdx = findPreferredSourceIndex(group)
+            if (preferredIdx != getCurrentSourceIndex()) {
+                setCurrentSourceIndex(preferredIdx)
+            }
         }
 
         attemptedSourceIndexes.add(getCurrentSourceIndex())
         cancelBufferingFailover()
+        // P2: 加载超时在 onReadyStallWarmup 之后启动（避免干扰）
         onReadyStallWarmup()
+        startLoadTimeout()
 
         val sourceIndex = getCurrentSourceIndex()
         val sourceUrl = group.sources[sourceIndex]
@@ -91,10 +105,11 @@ class ChannelSwitcher(
             playNextSourceForCurrentChannel("play_call_failed")
             return
         }
-
     }
 
     fun playNextSourceForCurrentChannel(reason: String) {
+        cancelLoadTimeout()
+
         val channelGroups = getChannelGroups()
         val currentChannelIndex = getCurrentChannelIndex()
         if (currentChannelIndex !in channelGroups.indices) return
@@ -104,6 +119,24 @@ class ChannelSwitcher(
             return
         }
 
+        // P0: 选源时优先记忆中可播放的，且未尝试过的
+        val playableHosts = getPlayableHosts()
+        for (offset in 1 until group.sources.size) {
+            val candidateIndex = (getCurrentSourceIndex() + offset) % group.sources.size
+            if (attemptedSourceIndexes.contains(candidateIndex)) continue
+            // 如果有可播放域名集合，优先选匹配的
+            if (playableHosts.isNotEmpty()) {
+                val candidateHost = PlayableHostStore.extractHost(group.sources[candidateIndex])
+                if (candidateHost != null && candidateHost in playableHosts) {
+                    logWarning("Switching to known-good host for ${group.name}, reason=$reason, to index=$candidateIndex")
+                    setCurrentSourceIndex(candidateIndex)
+                    playCurrentSource(resetAttempts = false)
+                    return
+                }
+            }
+        }
+
+        // 回退：选第一个未尝试过的
         for (offset in 1 until group.sources.size) {
             val candidateIndex = (getCurrentSourceIndex() + offset) % group.sources.size
             if (attemptedSourceIndexes.contains(candidateIndex)) continue
@@ -167,6 +200,12 @@ class ChannelSwitcher(
         bufferingFailoverJob = null
     }
 
+    /** P2: 取消 15s 加载超时——在 STATE_READY 或位置推进后调用 */
+    fun cancelLoadTimeout() {
+        loadTimeoutJob?.cancel()
+        loadTimeoutJob = null
+    }
+
     fun tryForceHlsForCurrentSource(error: Throwable): Boolean {
         if (!isUnrecognizedInputFormat(error)) return false
         val currentChannelIndex = getCurrentChannelIndex()
@@ -183,9 +222,31 @@ class ChannelSwitcher(
         switchDebounceJob?.cancel()
         singleSourceRetryJob?.cancel()
         cancelBufferingFailover()
+        cancelLoadTimeout()
     }
 
     fun describeActiveSource(): String = getActivePlaylistSource()
+
+    /** P0: 从记忆中找已证明可播放的源索引 */
+    private fun findPreferredSourceIndex(group: ChannelGroup): Int {
+        val playableHosts = getPlayableHosts()
+        if (playableHosts.isEmpty()) return getCurrentSourceIndex().coerceIn(0, group.sources.lastIndex)
+        val preferredIdx = group.sources.indexOfFirst { url ->
+            val host = PlayableHostStore.extractHost(url)
+            host != null && host in playableHosts
+        }
+        return if (preferredIdx >= 0) preferredIdx else getCurrentSourceIndex().coerceIn(0, group.sources.lastIndex)
+    }
+
+    /** P2: 启动 15s 加载超时 */
+    private fun startLoadTimeout() {
+        loadTimeoutJob?.cancel()
+        loadTimeoutJob = scope.launch {
+            delay(CHANNEL_LOAD_TIMEOUT_MS)
+            logWarning("Load timeout (${CHANNEL_LOAD_TIMEOUT_MS}ms), trying next source")
+            playNextSourceForCurrentChannel("load_timeout")
+        }
+    }
 
     private fun isUnrecognizedInputFormat(error: Throwable): Boolean {
         var current: Throwable? = error
@@ -205,5 +266,7 @@ class ChannelSwitcher(
         private const val SINGLE_SOURCE_RETRY_MAX_MS = 15000L
         private const val SINGLE_SOURCE_RETRY_MIN_GAP_MS = 12000L
         private const val SINGLE_SOURCE_RETRY_MAX_COUNT = 3
+        // P2: 15s 初始加载超时
+        private const val CHANNEL_LOAD_TIMEOUT_MS = 15000L
     }
 }

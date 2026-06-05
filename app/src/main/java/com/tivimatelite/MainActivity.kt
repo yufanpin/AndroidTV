@@ -17,6 +17,7 @@ import com.tivimatelite.loader.ChannelGroup
 import com.tivimatelite.loader.ChannelLoader
 import com.tivimatelite.monitor.PlayerSnapshot
 import com.tivimatelite.monitor.ReadyStallWatch
+import com.tivimatelite.player.PlayableHostStore
 import com.tivimatelite.player.PlayerManager
 import com.tivimatelite.player.PlaybackHistoryStore
 import com.tivimatelite.switcher.ChannelSwitcher
@@ -54,6 +55,12 @@ class MainActivity : AppCompatActivity() {
         override fun onPlayerError(error: PlaybackException) {
             FileLogStore.w(TAG, "onPlayerError: errorCode=${error.errorCode} ${error.localizedMessage}")
             cancelReadyStallWatch()
+            // P0: 记忆移除——线路播放失败
+            val currentUrl = PlayerManager.getPlayer(this@MainActivity).currentMediaItem?.localConfiguration?.uri?.toString()
+            if (currentUrl != null) {
+                PlayableHostStore.removeHost(this@MainActivity, currentUrl)
+                AppLogStore.i(TAG, "Removed failed host from playable hosts: $currentUrl")
+            }
             if (channelSwitcher.tryForceHlsForCurrentSource(error)) return
             AppLogStore.w(TAG, "Playback error, trying next source", error)
             channelSwitcher.playNextSourceForCurrentChannel("player_error")
@@ -68,7 +75,14 @@ class MainActivity : AppCompatActivity() {
                 }
                 Player.STATE_READY -> {
                     channelSwitcher.cancelBufferingFailover()
+                    channelSwitcher.cancelLoadTimeout()
                     startReadyStallWatch()
+                    // P0: 线路播放成功→记忆域名
+                    val player = PlayerManager.getPlayer(this@MainActivity)
+                    val url = player.currentMediaItem?.localConfiguration?.uri?.toString()
+                    if (url != null) {
+                        PlayableHostStore.addHost(this@MainActivity, url)
+                    }
                 }
                 Player.STATE_ENDED -> {
                     cancelReadyStallWatch()
@@ -126,18 +140,19 @@ class MainActivity : AppCompatActivity() {
             },
             getNowMs = { System.currentTimeMillis() },
             isPlayerBufferingAndPlaying = {
-                val player = binding.playerView.player
-                player?.playbackState == Player.STATE_BUFFERING && player.playWhenReady
-            }
+                val player = PlayerManager.getPlayer(this@MainActivity)
+                player.playbackState == Player.STATE_BUFFERING && player.playWhenReady
+            },
+            getPlayableHosts = { PlayableHostStore.getHosts(this@MainActivity) }
         )
         readyStallWatch = ReadyStallWatch(
             scope = scope,
             getPlayerSnapshot = {
-                val player = binding.playerView.player
+                val player = PlayerManager.getPlayer(this@MainActivity)
                 PlayerSnapshot(
-                    isReady = player?.playbackState == Player.STATE_READY,
-                    playWhenReady = player?.playWhenReady == true,
-                    currentPositionMs = player?.currentPosition ?: 0L
+                    isReady = player.playbackState == Player.STATE_READY,
+                    playWhenReady = player.playWhenReady,
+                    currentPositionMs = player.currentPosition
                 )
             },
             getNowMs = { System.currentTimeMillis() },
@@ -165,8 +180,9 @@ class MainActivity : AppCompatActivity() {
 
         val player = PlayerManager.getPlayer(this)
         player.addListener(playerListener)
-        binding.playerView.player = player
-        binding.playerView.requestFocus()
+        // P3: 使用 SurfaceView 替代 PlayerView（避免切台黑闪）
+        player.setVideoSurfaceView(binding.playerSurface)
+        binding.playerSurface.requestFocus()
 
         lastPlaylistFingerprint = PlaylistStore.getConfigFingerprint(this)
         loadChannels()
@@ -243,8 +259,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         FileLogStore.i(TAG, "onDestroy isFinishing=$isFinishing")
-        binding.playerView.player?.removeListener(playerListener)
-        binding.playerView.player = null
+        PlayerManager.getPlayer(this).removeListener(playerListener)
+        binding.playerSurface.alpha = 0f
         backendInfoHideJob?.cancel()
         reloadChannelsJob?.cancel()
         inputHandler.cancel()
