@@ -15,6 +15,7 @@ import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -160,8 +161,9 @@ object PlayerManager {
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
 
-        // P4: 启用扩展渲染器模式（支持第三方解码器如 ffmpeg，无扩展时回退内置）
-        val renderersFactory = DefaultRenderersFactory(context).apply {
+        // P4: 使用 NextRenderersFactory（继承 DefaultRenderersFactory）
+        // 提供 FFmpeg 软件解码（H.264, HEVC, VP8, VP9 + 多种音频格式）
+        val renderersFactory = NextRenderersFactory(context).apply {
             setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             enableAudioOutputPlaybackParameters(this)
         }

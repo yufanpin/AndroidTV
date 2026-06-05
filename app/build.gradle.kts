@@ -35,11 +35,14 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
 
-    implementation("androidx.media3:media3-exoplayer:1.5.1")
-    implementation("androidx.media3:media3-exoplayer-hls:1.5.1")
-    implementation("androidx.media3:media3-exoplayer-rtsp:1.5.1")
-    implementation("androidx.media3:media3-ui:1.5.1")
-    implementation("androidx.media3:media3-decoder:1.5.1")
+    implementation("androidx.media3:media3-exoplayer:1.7.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.7.1")
+    implementation("androidx.media3:media3-exoplayer-rtsp:1.7.1")
+    implementation("androidx.media3:media3-ui:1.7.1")
+    implementation("androidx.media3:media3-decoder:1.7.1")
+
+    // P4: NextLib FFmpeg software decoders (audio + video) — GPL-3.0
+    implementation("io.github.anilbeesetti:nextlib-media3ext:1.7.1-0.9.0")
 
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
