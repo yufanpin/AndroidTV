@@ -37,6 +37,8 @@ object PlayerManager {
 
     @Volatile
     private var player: ExoPlayer? = null
+    // 保存 applicationContext 供异步回调使用（ExoPlayer 接口无 applicationContext）
+    private var appContext: Context? = null
 
     // P1: 记录当前 URL 已尝试过的内容类型（用于 PARSING_CONTAINER_UNSUPPORTED 重试）
     private val contentTypeAttempts = mutableMapOf<String, MutableSet<Int>>()
@@ -61,6 +63,7 @@ object PlayerManager {
     )
 
     fun getPlayer(context: Context): ExoPlayer {
+        appContext = context.applicationContext
         return player ?: synchronized(this) {
             player ?: buildPlayer(context.applicationContext).also { player = it }
         }
@@ -255,7 +258,7 @@ object PlayerManager {
                 }
                 if (nextType != null) {
                     AppLogStore.w(TAG, "Container unsupported, retrying as type=$nextType")
-                    val context = player?.applicationContext ?: return
+                    val context = appContext ?: return
                     play(context, currentUrl, forceHls = nextType == C.CONTENT_TYPE_HLS)
                     return
                 }
