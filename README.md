@@ -1,37 +1,56 @@
-# S905L3 测试指南
+# TiviMateLite
 
-本项目可以直接通过 GitHub Actions 云端构建 APK，再安装到家里的 Android 9 / S905L3 机顶盒上测试。
+Android TV IPTV 播放器，专为晶晨 S905L3（2GB RAM、Android 9）低端机顶盒打造。
+像素级致敬 TiviMate 架构，RAM 目标 ≤60MB，秒切台，不掉帧。
 
-## 使用 GitHub Actions 构建
+---
 
-1. 把当前项目推送到 GitHub 仓库。
-2. 打开仓库页面，进入 `Actions`。
-3. 手动运行 `Android CI`，或者推送到 `main` / `master` 自动触发。
-4. 等待任务完成后打开 workflow run。
-5. 下载 `TiviMateLite-debug-apk` artifact。
-6. 解压后得到 `app-debug.apk`。
+## 功能特性
 
-当前 workflow 会在云端安装 JDK 17 和 Gradle 8.10.2，不依赖你本机安装 Gradle。
+| 特性 | 说明 |
+|---|---|
+| 智能线路记忆（P0） | 播放成功自动记录域名，切台优先选记忆中可播放的源，失败自动移除 |
+| 播放错误自愈（P1） | BEHIND_LIVE_WINDOW → 跳默认位置重试；PARSING_CONTAINER_UNSUPPORTED → 自动换格式（auto→HLS→Progressive） |
+| 加载超时保护（P2） | 15s 超时自动切下一源（独立于 35s 缓冲超时） |
+| SurfaceView 渲染（P3） | 裸 SurfaceView 替代 PlayerView，切台无黑闪 |
+| 扩展解码器支持（P4） | EXTENSION_RENDERER_MODE_ON，内置/ffmpeg 解码器兼容 |
+| 解码器信息采集（P5） | AnalyticsListener 实时采集视频/音频解码器名称、分辨率、码率等 |
+| 响度增强 | LoudnessEnhancer 200mB（~2dB）增益，切台后自动应用 |
+| 容器格式自动探测 | 先 auto 让 ExoPlayer 自动推断，失败后 HLS → Progressive 轮换 |
+| Web 后台管理 | NanoHTTPD 内置管理面板（端口 5220），查看日志、管理源 |
+| 文件日志持久化 | 写入 `cacheDir/tivimate_diag.txt`，ADB 断开后仍可拉取 |
+| 心跳监控日志 | 每 10s 写入 HEARTBEAT 确认 app 存活 |
 
-## 准备直播源
+---
 
-App 当前从下面这个 asset 路径读取直播源：
+## 快速开始
+
+### 使用 GitHub Actions 构建
+
+1. 把项目推送到 GitHub 仓库。
+2. 打开仓库 `Actions` → 自动触发 `Android CI`。
+3. 等待任务完成后下载 `TiviMateLite-debug-apk` artifact。
+4. 解压得到 `app-debug.apk`。
+
+CI 配置：JDK 17 + Gradle 8.10.2 + AGP 8.7.3 + Kotlin 2.0.21。
+
+### 准备直播源
+
+默认从 asset 路径读取：
 
 ```text
 app/src/main/assets/channels.m3u
 ```
 
-如果你要改为网页后台统一管理直播源，设置 `app/build.gradle.kts` 里的：
+改为远程源（`app/build.gradle.kts`）：
 
 ```kotlin
 buildConfigField("String", "PLAYLIST_URL", "\"http://your-server/channels.m3u\"")
 ```
 
-App 启动时会先尝试拉取这个远程地址；远程失败才回退到本地 `assets/channels.m3u`。
+启动时优先拉取远程源，失败回退本地 asset。
 
-正式测试前，先放一个小型 `channels.m3u`，建议 5-20 个频道。确认焦点、解析、播放都正常后，再换成几千到几万行的大列表。
-
-示例格式：
+示例：
 
 ```m3u
 #EXTM3U
@@ -39,60 +58,134 @@ App 启动时会先尝试拉取这个远程地址；远程失败才回退到本�
 http://example.com/live/cctv1.m3u8
 ```
 
-## 安装到机顶盒
-
-如果机顶盒开启了网络 ADB，并且电脑和机顶盒在同一局域网：
+### 安装到机顶盒
 
 ```bash
-adb connect BOX_IP_ADDRESS:5555
+adb connect BOX_IP:5555
 adb install -r app-debug.apk
 adb shell monkey -p com.tivimatelite 1
 ```
 
-如果没有网络 ADB，就把 APK 复制到 U 盘，用机顶盒文件管理器安装。
+---
 
-## 基础播放测试
+## 核心架构
 
-1. 启动 `TiviMateLite`。
-2. 按 `OK` 或任意方向键，确认 Overlay 立即显示。
-3. 连续按上下键快速滚动频道列表。
-4. 停在某个频道超过 300 ms。
-5. 确认只有停留后才真正切台播放。
-6. 按 `Back`，确认 Overlay 立即隐藏。
+```
+PlayerManager (object, 单例 ExoPlayer)
+  ├─ setMediaItem + prepare 切台（不重建 player）
+  ├─ P1 容器格式重试链 (auto→HLS→OTHER)
+  ├─ P4 EXTENSION_RENDERER_MODE_ON
+  ├─ P5 LoudnessEnhancer (STATE_READY 时懒加载)
+  └─ P5 AnalyticsListener 解码器信息采集
 
-## 性能检查命令
+ChannelSwitcher
+  ├─ P0 智能选源（记忆域名优先）
+  ├─ P2 15s 加载超时 (cancelLoadTimeout)
+  └─ 35s 缓冲超时 failover
 
-播放过程中执行：
+PlayableHostStore (SharedPreferences)
+  └─ addHost / removeHost / getHosts / extractHost
+
+MainActivity
+  ├─ P3 SurfaceView (setVideoSurfaceView)
+  ├─ P0 STATE_READY→记忆 / PLAYER_ERROR→移除
+  └─ P2 STATE_READY→取消加载超时
+```
+
+### 关键设计
+
+- **单 ExoPlayer 实例**：切台只调 `setMediaItem` + `prepare`，永不 `release`/重建
+- **SurfaceView**：裸 SurfaceView 替代 PlayerView，消除切台黑闪
+- **纯黑背景**：`#000000`，无动画过渡
+- **Glide**：强制 `override(64,64)` + `RGB_565`，滑动时不加载
+- **硬解异常**：捕获 `MediaCodec` 异常链，只日志不崩溃
+
+---
+
+## 调试命令
+
+### 基础检查
 
 ```bash
 adb shell dumpsys meminfo com.tivimatelite
 adb shell top -o PID,CPU,RES,ARGS | grep tivimatelite
-adb logcat -s PlayerManager MainActivity MediaCodec ExoPlayer
+adb logcat -s PlayerManager MainActivity
 ```
 
-S905L3 上的目标表现：
+### 功能验证
 
-- App 启动稳定后，进程内存尽量贴近 60 MB 目标。
-- 快速按遥控上下键时，频道列表焦点不应卡顿。
-- 切台时不应重建 `ExoPlayer` 实例。
-- 硬解异常应写入日志，不应直接崩溃。
-- Overlay 显示和隐藏不应有动画。
+```bash
+# 响度增强器
+adb logcat -s PlayerManager | findstr LoudnessEnhancer
+# → "LoudnessEnhancer applied: gain=200 mB, session=XX"
 
-## 大直播源测试
+# 解码器信息
+adb logcat -s PlayerManager | findstr "Video decoder\|Audio decoder"
+# → "Video decoder: OMX.amlogic.hevc.decoder.awesome (init=XXms)"
+# → "Audio decoder: OMX.google.aac.decoder (init=XXms)"
 
-小列表通过后，把 `channels.m3u` 换成完整直播源，再通过 GitHub Actions 重新构建 APK。
+# 加载超时
+adb logcat -s ChannelSwitcher | findstr load_timeout
+# → "Load timeout (15000ms), trying next source"
 
-大列表测试重点观察：
+# 容器格式重试
+adb logcat -s PlayerManager | findstr "Container unsupported"
+# → "Container unsupported, retrying as type=2"
 
-- `logcat` 是否出现长时间 GC。
-- 解析直播源时遥控输入是否卡顿。
-- 反复切台后 RAM 是否持续上涨。
-- 快速滚动列表时解码器是否锁死。
+# 线路记忆
+adb logcat -s MainActivity | findstr "playable hosts"
+# → "Removed failed host from playable hosts: http://..."
 
-## 常用恢复命令
+# 设备端日志文件（ADB 断开后仍可用）
+adb shell cat /data/data/com.tivimatelite/cache/tivimate_diag.txt
+```
+
+### 性能命令
+
+```bash
+# ADB keepalive（长测必开，ADB 约 3 分钟无活动断开）
+powershell -c "while(1){sleep 5; adb shell echo alive > $null}"
+
+# 内存快照
+adb shell dumpsys meminfo com.tivimatelite
+
+# 日志过滤
+adb logcat -s PlayerManager MainActivity MediaCodec ExoPlayer ChannelSwitcher
+```
+
+### 恢复命令
 
 ```bash
 adb shell am force-stop com.tivimatelite
 adb shell pm clear com.tivimatelite
 adb uninstall com.tivimatelite
 ```
+
+---
+
+## 目标表现
+
+- 启动后内存贴近 60 MB
+- 快速按上下键不卡顿
+- 切台不重建 ExoPlayer
+- 硬解异常不崩溃
+- Overlay 显示隐藏无动画
+
+---
+
+## 按键映射
+
+| 按键 | 动作 |
+|---|---|
+| 上下键 | 频道列表滚动（300ms 防抖） |
+| 左右键 | 音量调节 |
+| 数字键 0-9 | 数字选台（900ms 无输入确认） |
+| MENU / SETTINGS / INFO | 切换后台诊断信息浮层 |
+
+---
+
+## 已知问题
+
+- **UnexpectedDiscontinuityException**：中国移动源音频 PTS 每 30-40s 跳变导致卡顿，已通过反射 `setEnableAudioTrackPlaybackParams` 缓解，效果待确认
+- **fmt=ts2hls HLS timeline 不连续**：实时转码流导致 currentPosition 卡住，300s ready-stall 保守兜底
+- **ADB 约 3 分钟无活动断开**：长测需后台 keepalive
