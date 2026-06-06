@@ -5,6 +5,7 @@ import android.net.TrafficStats
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import android.view.SurfaceHolder
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.PlaybackException
@@ -51,11 +52,23 @@ class MainActivity : AppCompatActivity() {
     private var lastPlaylistFingerprint: String? = null
     private var activePlaylistSource = "local assets/channels.m3u"
 
+    /** SurfaceHolder.Callback È·±£±íÃæ´´½¨/ÖØ½¨Ê±»ñµÃĞÂÏÊ±íÃæ£¬ÈÆ¹ı Amlogic HWC ÓÄÁé±íÃæ bug */
+    private val surfaceCallback = object : SurfaceHolder.Callback {
+        override fun surfaceCreated(holder: SurfaceHolder) {
+            val player = PlayerManager.getPlayer(this@MainActivity)
+            player.setVideoSurface(holder.surface)
+        }
+        override fun surfaceChanged(holder: SurfaceHolder, format: Int, w: Int, h: Int) {}
+        override fun surfaceDestroyed(holder: SurfaceHolder) {
+            PlayerManager.getPlayer(this@MainActivity).clearVideoSurface()
+        }
+    }
+
     private val playerListener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
             FileLogStore.w(TAG, "onPlayerError: errorCode=${error.errorCode} ${error.localizedMessage}")
             cancelReadyStallWatch()
-            // P0: è®°å¿†ç§»é™¤â€”â€”çº¿è·¯æ’­æ”¾å¤±è´¥
+            // P0: è®°å¿†ç§»é™¤â€”â€”çº¿è·¯æ’­æ”¾å¤±è´?
             val currentUrl = PlayerManager.getPlayer(this@MainActivity).currentMediaItem?.localConfiguration?.uri?.toString()
             if (currentUrl != null) {
                 PlayableHostStore.removeHost(this@MainActivity, currentUrl)
@@ -77,7 +90,7 @@ class MainActivity : AppCompatActivity() {
                     channelSwitcher.cancelBufferingFailover()
                     channelSwitcher.cancelLoadTimeout()
                     startReadyStallWatch()
-                    // P0: çº¿è·¯æ’­æ”¾æˆåŠŸâ†’è®°å¿†åŸŸå
+                    // P0: çº¿è·¯æ’­æ”¾æˆåŠŸâ†’è®°å¿†åŸŸå?
                     val player = PlayerManager.getPlayer(this@MainActivity)
                     val url = player.currentMediaItem?.localConfiguration?.uri?.toString()
                     if (url != null) {
@@ -180,6 +193,8 @@ class MainActivity : AppCompatActivity() {
 
         val player = PlayerManager.getPlayer(this)
         player.addListener(playerListener)
+        // Register SurfaceHolder.Callback ONCE ¡ª never removed, ensures surface lifecycle is tracked
+        binding.playerSurface.holder.addCallback(surfaceCallback)
         attachPlayerSurface()
 
         lastPlaylistFingerprint = PlaylistStore.getConfigFingerprint(this)
@@ -252,7 +267,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         FileLogStore.i(TAG, "onStop")
-        PlayerManager.getPlayer(this).clearVideoSurfaceView(binding.playerSurface)
+        // Keep SurfaceHolder.Callback registered - it will receive surfaceCreated on resume
         super.onStop()
         PlayerManager.pause()
     }
@@ -357,11 +372,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun attachPlayerSurface() {
-        val player = PlayerManager.getPlayer(this)
-        binding.playerSurface.alpha = 1f
-        player.clearVideoSurface()
-        player.setVideoSurfaceView(binding.playerSurface)
-        binding.playerSurface.requestFocus()
+        // post ensures the SurfaceView surface is fully created before we bind
+        // Using setVideoSurface(holder.surface) directly instead of setVideoSurfaceView()
+        // to bypass the Amlogic phantom-surface bug where holder.getSurface() returns stale surface
+        binding.playerSurface.post {
+            val player = PlayerManager.getPlayer(this@MainActivity)
+            val surface = binding.playerSurface.holder.surface
+            if (surface?.isValid == true) {
+                player.setVideoSurface(surface)
+            }
+            binding.playerSurface.requestFocus()
+        }
     }
 
     private fun toggleBackendInfo() {
