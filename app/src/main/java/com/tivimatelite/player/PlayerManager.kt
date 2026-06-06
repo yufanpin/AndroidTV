@@ -15,7 +15,7 @@ import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
-import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
+
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -161,10 +161,11 @@ object PlayerManager {
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
 
-        // P4: 使用 NextRenderersFactory（继承 DefaultRenderersFactory）
-        // 提供 FFmpeg 软件解码（H.264, HEVC, VP8, VP9 + 多种音频格式）
-        val renderersFactory = NextRenderersFactory(context).apply {
-            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+        // P4: 使用 DefaultRenderersFactory
+        // NextLib FFmpeg 软解在 S905L3 (2GB) 上 CPU 无法实时出帧，弃用
+        // 依赖硬件解码器（OMX.amlogic.*）确保视频正常渲染
+        val renderersFactory = DefaultRenderersFactory(context).apply {
+            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
             enableAudioOutputPlaybackParameters(this)
         }
 

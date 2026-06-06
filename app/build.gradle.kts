@@ -41,8 +41,6 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.7.1")
     implementation("androidx.media3:media3-decoder:1.7.1")
 
-    // P4: NextLib FFmpeg software decoders (audio + video) — GPL-3.0
-    implementation("io.github.anilbeesetti:nextlib-media3ext:1.7.1-0.9.0")
 
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
