@@ -1,8 +1,8 @@
 TiviMateLite — Handoff for Future AI / Developer
 =================================================
-Last updated: 2026-06-06 19:20 CST
+Last updated: 2026-06-06 19:50 CST
 Current branch: test (not main)
-Current HEAD: 0f9c637 (feat: add playback tuning controls) + uncommitted switch speed optimizations
+Current HEAD: 8b37ced (test: fix ChannelSwitcherTest for 150ms debounce and direct playUrl)
 
 === App Overview ===
 - Kotlin + XML + ViewBinding + Media3 ExoPlayer 1.5.1 + NanoHTTPD
@@ -63,13 +63,19 @@ Note: test branch diverged from main. Use `git log main..test` to see diffs.
   - POST /profile/decoder?value=SW_PREFERRED → radio shows SW_PREFERRED checked
   - After force-stop + relaunch: settings survive app restart
 
-[Wave 3] Channel switch speed optimization (uncommitted)
+[Wave 3] Channel switch speed optimization
 - ChannelSwitcher.playCurrentSource(): Removed serial precheckSource call —
   `playUrl(sourceUrl, forceHls)` is now called directly without the HTTP
   `Range:bytes=0-0` probe. Saves 200-3500ms per channel switch (typical 300-800ms).
   The 15s load timeout + 35s buffer timeout still handle dead-source failover.
 - CHANNEL_ZAP_DEBOUNCE_MS: 300ms → 150ms. Shaves 150ms from key-to-picture latency.
-- Combined estimated improvement: 350-950ms reduction in time-to-first-frame.
+- Combined estimated improvement: 350-3650ms reduction in time-to-first-frame.
+- CI run #27060426245: SUCCESS (Build + Unit Tests)
+- Device-verified on 192.168.20.240:
+  - 3 consecutive channel switches completed without crash
+  - No "Pre-check failed" log entries (precheckSource removed from critical path)
+  - Each switch ~1.0-1.2s (pure ExoPlayer prepare() — manifest fetch + first segment)
+  - Sources play correctly without precheck confirmation
 
 === NOT YET IMPLEMENTED / EXPLORED ===
 
