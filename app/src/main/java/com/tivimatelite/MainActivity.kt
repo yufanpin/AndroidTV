@@ -26,6 +26,7 @@ import com.tivimatelite.util.HttpFetcher
 import com.tivimatelite.web.AppLogStore
 import com.tivimatelite.web.FileLogStore
 import com.tivimatelite.web.LocalAdminServerManager
+import com.tivimatelite.web.PlaybackTuningPrefs
 import com.tivimatelite.web.PlaylistStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -138,6 +139,8 @@ class MainActivity : AppCompatActivity() {
 
         audioManager = getSystemService(AudioManager::class.java)
         channelLoader = ChannelLoader(this)
+        PlayerManager.setBufferProfile(PlaybackTuningPrefs.getBufferProfile(this))
+        PlayerManager.setDecoderFallbackPolicy(PlaybackTuningPrefs.getDecoderFallbackPolicy(this))
         channelSwitcher = ChannelSwitcher(
             scope = scope,
             getChannelGroups = { channelGroups },

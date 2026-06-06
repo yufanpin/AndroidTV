@@ -1,6 +1,7 @@
 package com.tivimatelite.web
 
 import android.content.Context
+import com.tivimatelite.player.PlayerManager
 import fi.iki.elonen.NanoHTTPD
 
 class LocalAdminServer(
@@ -79,6 +80,22 @@ class LocalAdminServer(
                 AppLogStore.i("AdminServer", "日志已清空")
                 redirect("/logs")
             }
+            "/profile/buffer" -> {
+                val value = session.parameters["value"]?.firstOrNull().orEmpty()
+                PlayerManager.BufferProfile.entries.firstOrNull { it.name == value }?.let {
+                    PlaybackTuningPrefs.setBufferProfile(appContext, it)
+                    PlayerManager.setBufferProfile(it)
+                }
+                redirect("/")
+            }
+            "/profile/decoder" -> {
+                val value = session.parameters["value"]?.firstOrNull().orEmpty()
+                PlayerManager.DecoderFallbackPolicy.entries.firstOrNull { it.name == value }?.let {
+                    PlaybackTuningPrefs.setDecoderFallbackPolicy(appContext, it)
+                    PlayerManager.setDecoderFallbackPolicy(it)
+                }
+                redirect("/")
+            }
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
         }
     }
@@ -99,6 +116,8 @@ class LocalAdminServer(
         val selectedId = PlaylistStore.getSelectedSourceId(appContext)
         val sources = PlaylistStore.getCustomSources(appContext)
         val effective = PlaylistStore.loadEffectivePlaylist(appContext)
+        val bufferProfile = PlaybackTuningPrefs.getBufferProfile(appContext)
+        val decoderPolicy = PlaybackTuningPrefs.getDecoderFallbackPolicy(appContext)
 
         val rows = buildString {
             for (source in sources) {
@@ -178,6 +197,26 @@ class LocalAdminServer(
                       </tbody>
                     </table>
                   </div>
+                </details>
+
+                <details class="box">
+                  <summary>缓冲策略</summary>
+                  <form action="/profile/buffer" method="post" style="margin-top:12px;">
+                    <label><input type="radio" name="value" value="FAST_SWITCH" ${if (bufferProfile == PlayerManager.BufferProfile.FAST_SWITCH) "checked" else ""}/> FAST_SWITCH</label><br/>
+                    <label><input type="radio" name="value" value="BALANCED" ${if (bufferProfile == PlayerManager.BufferProfile.BALANCED) "checked" else ""}/> BALANCED</label><br/>
+                    <label><input type="radio" name="value" value="STABLE" ${if (bufferProfile == PlayerManager.BufferProfile.STABLE) "checked" else ""}/> STABLE</label><br/><br/>
+                    <button type="submit">保存缓冲策略</button>
+                  </form>
+                </details>
+
+                <details class="box">
+                  <summary>解码回退策略</summary>
+                  <form action="/profile/decoder" method="post" style="margin-top:12px;">
+                    <label><input type="radio" name="value" value="HW_ONLY" ${if (decoderPolicy == PlayerManager.DecoderFallbackPolicy.HW_ONLY) "checked" else ""}/> HW_ONLY</label><br/>
+                    <label><input type="radio" name="value" value="HW_WITH_SW_FALLBACK" ${if (decoderPolicy == PlayerManager.DecoderFallbackPolicy.HW_WITH_SW_FALLBACK) "checked" else ""}/> HW_WITH_SW_FALLBACK</label><br/>
+                    <label><input type="radio" name="value" value="SW_PREFERRED" ${if (decoderPolicy == PlayerManager.DecoderFallbackPolicy.SW_PREFERRED) "checked" else ""}/> SW_PREFERRED</label><br/><br/>
+                    <button type="submit">保存解码回退策略</button>
+                  </form>
                 </details>
 
                 <details class="box">

@@ -12,8 +12,12 @@ class AdminFeatureSourceTest {
         ).readText()
 
         assertTrue(source.contains("/boot/toggle"))
+        assertTrue(source.contains("/profile/buffer"))
+        assertTrue(source.contains("/profile/decoder"))
         assertTrue(source.contains("/source/add-content"))
         assertTrue(source.contains("开机自动启动 App"))
+        assertTrue(source.contains("缓冲策略"))
+        assertTrue(source.contains("解码回退策略"))
         assertTrue(source.contains("直接粘贴直播源内容"))
         assertTrue(source.contains("可选方式"))
         assertTrue(source.contains("<details"))
