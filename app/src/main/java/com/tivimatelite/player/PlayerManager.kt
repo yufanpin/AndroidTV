@@ -8,6 +8,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -164,8 +165,9 @@ object PlayerManager {
         // P4: 使用 DefaultRenderersFactory
         // NextLib FFmpeg 软解在 S905L3 (2GB) 上 CPU 无法实时出帧，弃用
         // 依赖硬件解码器（OMX.amlogic.*）确保视频正常渲染
-        val renderersFactory = DefaultRenderersFactory(context).apply {
+        val renderersFactory = AmlogicRenderersFactory(context).apply {
             setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
+            setEnableDecoderFallback(true)
             enableAudioOutputPlaybackParameters(this)
         }
 
@@ -279,6 +281,14 @@ object PlayerManager {
                     }
                 }
             }
+        }
+
+        override fun onRenderedFirstFrame() {
+            AppLogStore.i(TAG, "Rendered first frame")
+        }
+
+        override fun onVideoSizeChanged(videoSize: VideoSize) {
+            AppLogStore.i(TAG, "Video size changed: ${videoSize.width}x${videoSize.height}")
         }
     }
 

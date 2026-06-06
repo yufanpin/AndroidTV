@@ -180,9 +180,7 @@ class MainActivity : AppCompatActivity() {
 
         val player = PlayerManager.getPlayer(this)
         player.addListener(playerListener)
-        // P3: 使用 SurfaceView 替代 PlayerView（避免切台黑闪）
-        player.setVideoSurfaceView(binding.playerSurface)
-        binding.playerSurface.requestFocus()
+        attachPlayerSurface()
 
         lastPlaylistFingerprint = PlaylistStore.getConfigFingerprint(this)
         loadChannels()
@@ -249,17 +247,21 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         FileLogStore.i(TAG, "onStart")
+        attachPlayerSurface()
     }
 
     override fun onStop() {
         FileLogStore.i(TAG, "onStop")
+        PlayerManager.getPlayer(this).clearVideoSurfaceView(binding.playerSurface)
         super.onStop()
         PlayerManager.pause()
     }
 
     override fun onDestroy() {
         FileLogStore.i(TAG, "onDestroy isFinishing=$isFinishing")
-        PlayerManager.getPlayer(this).removeListener(playerListener)
+        val player = PlayerManager.getPlayer(this)
+        player.removeListener(playerListener)
+        player.clearVideoSurfaceView(binding.playerSurface)
         binding.playerSurface.alpha = 0f
         backendInfoHideJob?.cancel()
         reloadChannelsJob?.cancel()
@@ -352,6 +354,14 @@ class MainActivity : AppCompatActivity() {
             direction,
             AudioManager.FLAG_SHOW_UI
         )
+    }
+
+    private fun attachPlayerSurface() {
+        val player = PlayerManager.getPlayer(this)
+        binding.playerSurface.alpha = 1f
+        player.clearVideoSurface()
+        player.setVideoSurfaceView(binding.playerSurface)
+        binding.playerSurface.requestFocus()
     }
 
     private fun toggleBackendInfo() {
