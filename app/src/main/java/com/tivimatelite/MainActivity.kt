@@ -52,7 +52,7 @@ class MainActivity : AppCompatActivity() {
     private var lastPlaylistFingerprint: String? = null
     private var activePlaylistSource = "local assets/channels.m3u"
 
-    /** SurfaceHolder.Callback È·±£±íÃæ´´½¨/ÖØ½¨Ê±»ñµÃĞÂÏÊ±íÃæ£¬ÈÆ¹ı Amlogic HWC ÓÄÁé±íÃæ bug */
+    /** SurfaceHolder.Callback È·ï¿½ï¿½ï¿½ï¿½ï¿½æ´´ï¿½ï¿½/ï¿½Ø½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½æ£¬ï¿½Æ¹ï¿½ Amlogic HWC ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ bug */
     private val surfaceCallback = object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
             val player = PlayerManager.getPlayer(this@MainActivity)
@@ -68,7 +68,7 @@ class MainActivity : AppCompatActivity() {
         override fun onPlayerError(error: PlaybackException) {
             FileLogStore.w(TAG, "onPlayerError: errorCode=${error.errorCode} ${error.localizedMessage}")
             cancelReadyStallWatch()
-            // P0: è®°å¿†ç§»é™¤â€”â€”çº¿è·¯æ’­æ”¾å¤±è´?
+            // P0: è®°å¿†ç§»é™¤â€”â€”çº¿è·¯æ’­æ”¾å¤±ï¿½?
             val currentUrl = PlayerManager.getPlayer(this@MainActivity).currentMediaItem?.localConfiguration?.uri?.toString()
             if (currentUrl != null) {
                 PlayableHostStore.removeHost(this@MainActivity, currentUrl)
@@ -90,7 +90,7 @@ class MainActivity : AppCompatActivity() {
                     channelSwitcher.cancelBufferingFailover()
                     channelSwitcher.cancelLoadTimeout()
                     startReadyStallWatch()
-                    // P0: çº¿è·¯æ’­æ”¾æˆåŠŸâ†’è®°å¿†åŸŸå?
+                    // P0: çº¿è·¯æ’­æ”¾æˆåŠŸâ†’è®°å¿†åŸŸï¿½?
                     val player = PlayerManager.getPlayer(this@MainActivity)
                     val url = player.currentMediaItem?.localConfiguration?.uri?.toString()
                     if (url != null) {
@@ -119,6 +119,7 @@ class MainActivity : AppCompatActivity() {
         FileLogStore.i(TAG, "onCreate savedInstanceState=$savedInstanceState")
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.playerSurface.setZOrderOnTop(true)
 
         LocalAdminServerManager.start(this)
         AppLogStore.i(TAG, "Admin ready at ${LocalAdminServerManager.getAdminUrl()}")
@@ -193,7 +194,7 @@ class MainActivity : AppCompatActivity() {
 
         val player = PlayerManager.getPlayer(this)
         player.addListener(playerListener)
-        // Register SurfaceHolder.Callback ONCE ¡ª never removed, ensures surface lifecycle is tracked
+        // Register SurfaceHolder.Callback ONCE ï¿½ï¿½ never removed, ensures surface lifecycle is tracked
         binding.playerSurface.holder.addCallback(surfaceCallback)
         attachPlayerSurface()
 
