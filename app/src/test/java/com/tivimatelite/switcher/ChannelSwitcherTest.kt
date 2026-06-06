@@ -44,7 +44,7 @@ class ChannelSwitcherTest {
         )
 
         switcher.requestSwitchByDelta(1)
-        advanceTimeBy(299)
+        advanceTimeBy(149)
         runCurrent()
         assertEquals(1, currentChannelIndex)
         assertEquals(emptyList<Pair<Int, Boolean>>(), plays)
@@ -156,7 +156,7 @@ class ChannelSwitcherTest {
     }
 
     @Test
-    fun `playCurrentSource uses prechecked url and skips unreachable source`() = runTest {
+    fun `playCurrentSource calls playUrl directly without precheck`() = runTest {
         var currentChannelIndex = 0
         var currentSourceIndex = 0
         val warnings = mutableListOf<String>()
@@ -179,15 +179,14 @@ class ChannelSwitcherTest {
             logError = { _ -> },
             getNowMs = { 0L },
             isPlayerBufferingAndPlaying = { false },
-            getPlayableHosts = { emptySet() },
-            precheckSource = { url -> if (url == "a1") null else "resolved-$url" }
+            getPlayableHosts = { emptySet() }
         )
 
         switcher.playCurrentSource(resetAttempts = true)
         runCurrent()
 
-        assertEquals(1, currentSourceIndex)
-        assertEquals(listOf("resolved-a2"), playedUrls)
-        assertTrue(warnings.any { it.contains("Pre-check failed") })
+        assertEquals(0, currentSourceIndex)
+        assertEquals(listOf("a1"), playedUrls)
+        assertFalse(warnings.any { it.contains("Pre-check failed") })
     }
 }
