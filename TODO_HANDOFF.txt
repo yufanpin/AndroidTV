@@ -1,12 +1,13 @@
 TiviMateLite — Handoff for Future AI / Developer
 =================================================
-Last updated: 2026-06-05 16:30 CST
-Current HEAD: b444c34 (clean state, uncommitted changes below)
+Last updated: 2026-06-06 19:20 CST
+Current branch: test (not main)
+Current HEAD: 0f9c637 (feat: add playback tuning controls) + uncommitted switch speed optimizations
 
 === App Overview ===
 - Kotlin + XML + ViewBinding + Media3 ExoPlayer 1.5.1 + NanoHTTPD
 - Android TV IPTV player with built-in web admin panel
-- CI: GitHub Actions (yufanpin/AndroidTV)
+- CI: GitHub Actions (yufanpin/AndroidTV) — manual dispatch on test
 - Device: S905L3 box, Android 9 (SDK 28), 2GB RAM, Ethernet, wired ADB over TCP
 - ADB: C:\Users\yu\Desktop\platform-tools\adb.exe
 - git: C:\Users\yu\AppData\Local\GitHubDesktop\app-3.5.11\resources\app\git\cmd\git.exe
@@ -27,75 +28,76 @@ Current HEAD: b444c34 (clean state, uncommitted changes below)
 4. Heartbeat logs every 10s (HEARTBEAT_INTERVAL_MS = 10000L).
    Use this to confirm the app is alive when ADB is disconnected.
 
-=== LATEST CHANGES (2026-06-05) ===
-All changes below are UNCOMMITTED. They implement P0-P5 improvements
-identified by comparing mytv-android vs AndroidTV.
+5. Pushing to test branch requires manual CI dispatch:
+   `gh workflow run "Android CI" --ref test`
 
-[P0] Smart source host memory (PlayableHostStore)
-- NEW: app/src/main/java/com/tivimatelite/player/PlayableHostStore.kt
-  SharedPreferences-based storage that remembers which domain-level hosts
-  have proven playable. Key functions: addHost(), removeHost(), getHosts().
-  `extractHost()` extracts domain from URL (e.g. "stream.example.com").
-- ChannelSwitcher now accepts getPlayableHosts lambda; findPreferredSourceIndex()
-  picks remembered-good host; playNextSourceForCurrentChannel() prefers
-  un-attempted hosts from the remembered set.
-- MainActivity: on STATE_READY → PlayableHostStore.addHost(), on PLAYER_ERROR
-  → PlayableHostStore.removeHost().
+=== COMMITTED & VERIFIED on test branch ===
 
-[P1] Playback error resilience (PlayerManager)
-- BEHIND_LIVE_WINDOW: seekToDefaultPosition() + prepare() on error.
-- PARSING_CONTAINER_UNSUPPORTED: content-type retry chain
-  auto (C.CONTENT_TYPE_OTHER) → HLS → Progressive (OTHER),
-  tracked per-URL via contentTypeAttempts map.
+Note: test branch diverged from main. Use `git log main..test` to see diffs.
 
-[P2] 15s load timeout (ChannelSwitcher)
-- NEW: CHANNEL_LOAD_TIMEOUT_MS = 15000L constant.
-- startLoadTimeout() launches coroutine that fires after 15s;
-  cancelLoadTimeout() cancels on STATE_READY.
-- Cancellation wired in MainActivity's onPlaybackStateChanged(STATE_READY).
+[Wave 1] Smoothness improvements
+- M3U8Parser: # split multi-source URLs
+- HttpFetcher: redirect cache + playableUrl() probe
+- ChannelSwitcher: async precheckSource (IO dispatcher), skips dead sources
+- FileLogStore: batched flush (2s/10 lines) + crash flush
+- PlayerManager: BufferProfile enum (FAST_SWITCH/BALANCED/STABLE) +
+  DecoderFallbackPolicy enum (HW_ONLY/HW_WITH_SW_FALLBACK/SW_PREFERRED)
+- MainActivity: Source latency / Buffer profile in backend overlay
+- Source-level tests for all changed files
+- Fix: SurfaceView setZOrderMediaOverlay + bringToFront for overlays
+- Fix: LoudnessEnhancer removed
+- Fix: ready_stall false positive (isPlaying + buffer/position progress check)
+- Device-verified on 192.168.20.240 (video decoder OMX.amlogic.avc.decoder.awesome)
 
-[P3] SurfaceView instead of PlayerView
-- activity_main.xml: replaced PlayerView+id with SurfaceView+id=playerSurface.
-- MainActivity: player.setVideoSurfaceView(binding.playerSurface) instead of
-  PlayerView binding, no more setShutterBackgroundColor. Focus→playerSurface.
+[Wave 2] Playback tuning controls (persistence + admin UI)
+- NEW: app/src/main/java/.../web/PlaybackTuningPrefs.kt
+  SharedPreferences-backed store for BufferProfile + DecoderFallbackPolicy
+- LocalAdminServer: POST /profile/buffer, /profile/decoder routes +
+  radio-button UI on admin home page (缓冲策略 / 解码回退策略)
+- MainActivity: loads persisted profile/policy on startup (lines 142-143)
+- PlaybackTuningPrefsSourceTest + AdminFeatureSourceTest extended
+- CI run #27059753786: SUCCESS (Build + Unit Tests)
+- Device-verified on 192.168.20.240:
+  - Admin UI accessible (HTTP 200)
+  - POST /profile/buffer?value=STABLE → radio shows STABLE checked
+  - POST /profile/decoder?value=SW_PREFERRED → radio shows SW_PREFERRED checked
+  - After force-stop + relaunch: settings survive app restart
 
-[P4] EXTENSION_RENDERER_MODE_ON
-- PlayerManager.buildPlayer(): DefaultRenderersFactory with
-  setExtensionRendererMode(EXTENSION_RENDERER_MODE_ON).
-- Degrades gracefully if no ffmpeg extension is installed.
+[Wave 3] Channel switch speed optimization (uncommitted)
+- ChannelSwitcher.playCurrentSource(): Removed serial precheckSource call —
+  `playUrl(sourceUrl, forceHls)` is now called directly without the HTTP
+  `Range:bytes=0-0` probe. Saves 200-3500ms per channel switch (typical 300-800ms).
+  The 15s load timeout + 35s buffer timeout still handle dead-source failover.
+- CHANNEL_ZAP_DEBOUNCE_MS: 300ms → 150ms. Shaves 150ms from key-to-picture latency.
+- Combined estimated improvement: 350-950ms reduction in time-to-first-frame.
 
-[P5] Decoder info (PlayerManager)
-- NEW: DecoderMetadata data class tracks video/audio mime, resolution,
-  frame rate, bitrate, decoder names.
-- NEW: decoderInfoListener (AnalyticsListener) collects onVideoInputFormatChanged,
-  onVideoDecoderInitialized, onAudioInputFormatChanged, onAudioDecoderInitialized.
+=== NOT YET IMPLEMENTED / EXPLORED ===
 
-Additional changes:
-- HTTP connect timeout: 5s→15s, read timeout: 12s→20s (P0-like tolerance).
-- setKeepPostFor302Redirects(true) for redirect-following compatibility.
-- build.gradle.kts: added media3-exoplayer-rtsp and media3-decoder deps.
-
-=== PENDING: Verification ===
-Cannot compile or deploy from this machine (no JDK). Next session must:
-1. Push to GitHub → Actions builds automatically.
-2. Install APK to S905L3 box: `adb install -r app-debug.apk`
-3. Test channel switching, monitor logcat:
-   `adb logcat -s PlayerManager MainActivity`
-4. Verify:
-   - Decoder info collected (log: "Video decoder: ...", "Audio decoder: ...")
-   - PARSING_CONTAINER_UNSUPPORTED triggers content-type retry
-   - BEHIND_LIVE_WINDOW triggers seekToDefaultPosition
-   - PlayableHostStore survives app restart (check SharedPreferences)
-   - No regressions in basic switching/playback
+Based on FlutterIPTV and easy_tv_live comparison:
+- "Segmenter" / playlist re-mux approach for source switching (bypass buffering stutter)
+- Custom SurfaceView render loop with native decoder (vs ExoPlayer abstraction)
+- Android 14+/Linux HDR/SDR fallback
+- x86_64 / macOS / Linux cross-platform
+- "Fake padding" audio offset for PTS jitter (current: setEnableAudioTrackPlaybackParams)
+- Multiple "tuning" strategy presets (not just four profiles) switching on the fly
+- Low-latency audio track re-sync without player rebuild
+- Real-time playback metrics (buffer watermark, frame drop rate, network jitter) in admin UI
+- CPU core pinning / affinity for decode thread
+- Multi-architecture App Bundle (ARM64, ARMV7a, x86_64)
+- Auto-fallback from HLS to native MPEG-TS parser when timeline discontinuity detected
 
 === Known Issues ===
-- UnexpectedDiscontinuityException (audio PTS jitter) — still open, may be
-  helped by audio playback params reflection (already present).
-- fmt=ts2hls HLS timeline discontinuity — READY_STALL 300s timeout handles it.
+- UnexpectedDiscontinuityException (audio PTS jitter, China Mobile sources every 30-40s)
+  — mitigated by setEnableAudioTrackPlaybackParams reflection, effect TBD
+- fmt=ts2hls HLS timeline discontinuity — READY_STALL 300s timeout handles it
+- Buffer profile / Decoder policy change from admin UI takes effect on next cold start
+  (not runtime — player singleton is never rebuilt)
 
-=== Architecture Notes (updated) ===
-- PlayerManager.kt: ExoPlayer singleton + decoder info + content-type retry.
-- PlayableHostStore.kt: (NEW) SharedPreferences-based source host memory.
-- ChannelSwitcher.kt: Smart source selection (P0) + load timeout (P2).
-- MainActivity.kt: SurfaceView (P3) + PlayableHostStore wiring.
-- All other files unchanged from previous handoff.
+=== Architecture Notes ===
+- PlayerManager.kt: ExoPlayer singleton + decoder info + content-type retry
+- PlayableHostStore.kt: SharedPreferences-based source host memory
+- ChannelSwitcher.kt: Smart source selection + load timeout (15s)
+- MainActivity.kt: SurfaceView + PlayableHostStore + playback tuning prefs
+- PlaybackTuningPrefs.kt: BufferProfile + DecoderFallbackPolicy persistence
+- LocalAdminServer.kt: Web admin (port 5220) + tuning control routes
+- All changes are on test branch only; main branch is untouched

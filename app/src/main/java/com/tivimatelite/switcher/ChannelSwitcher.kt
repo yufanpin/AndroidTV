@@ -100,13 +100,7 @@ class ChannelSwitcher(
         playAttemptJob?.cancel()
         playAttemptJob = scope.launch {
             try {
-                val checkedUrl = precheckSource(sourceUrl)
-                if (checkedUrl == null) {
-                    logWarning("Pre-check failed for ${group.name} source ${sourceIndex + 1}/${group.sources.size}")
-                    playNextSourceForCurrentChannel("source_precheck_failed")
-                    return@launch
-                }
-                playUrl(checkedUrl, forceHls)
+                playUrl(sourceUrl, forceHls)
                 savePlayback(group.name, sourceIndex, sourceUrl)
                 val modeSuffix = if (forceHls) " (forced HLS)" else ""
                 logInfo("Playing ${group.name} source ${sourceIndex + 1}/${group.sources.size}$modeSuffix")
@@ -271,7 +265,7 @@ class ChannelSwitcher(
     }
 
     companion object {
-        private const val CHANNEL_ZAP_DEBOUNCE_MS = 300L
+        private const val CHANNEL_ZAP_DEBOUNCE_MS = 150L
         private const val BUFFERING_FAILOVER_MS = 35000L
         private const val SINGLE_SOURCE_RETRY_BASE_MS = 5000L
         private const val SINGLE_SOURCE_RETRY_MAX_MS = 15000L
