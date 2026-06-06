@@ -119,7 +119,10 @@ class MainActivity : AppCompatActivity() {
         FileLogStore.i(TAG, "onCreate savedInstanceState=$savedInstanceState")
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        binding.playerSurface.setZOrderOnTop(true)
+        binding.playerSurface.setZOrderMediaOverlay(true)
+        binding.backendInfoText.bringToFront()
+        binding.channelNumberText.bringToFront()
+        binding.netSpeedText.bringToFront()
 
         LocalAdminServerManager.start(this)
         AppLogStore.i(TAG, "Admin ready at ${LocalAdminServerManager.getAdminUrl()}")
@@ -406,6 +409,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.backendInfoText.text = text
         AppLogStore.i(TAG, text.replace('\n', ' '))
+        binding.backendInfoText.bringToFront()
         binding.backendInfoText.visibility = View.VISIBLE
 
         backendInfoHideJob?.cancel()
