@@ -29,7 +29,7 @@ Current HEAD: b444c34 (clean state, uncommitted changes below)
 
 === LATEST CHANGES (2026-06-05) ===
 All changes below are UNCOMMITTED. They implement P0-P5 improvements
-identified by comparing mytv-android vs AndroidTV, plus LoudnessEnhancer.
+identified by comparing mytv-android vs AndroidTV.
 
 [P0] Smart source host memory (PlayableHostStore)
 - NEW: app/src/main/java/com/tivimatelite/player/PlayableHostStore.kt
@@ -64,14 +64,11 @@ identified by comparing mytv-android vs AndroidTV, plus LoudnessEnhancer.
   setExtensionRendererMode(EXTENSION_RENDERER_MODE_ON).
 - Degrades gracefully if no ffmpeg extension is installed.
 
-[P5] Decoder info + LoudnessEnhancer (PlayerManager)
+[P5] Decoder info (PlayerManager)
 - NEW: DecoderMetadata data class tracks video/audio mime, resolution,
   frame rate, bitrate, decoder names.
 - NEW: decoderInfoListener (AnalyticsListener) collects onVideoInputFormatChanged,
   onVideoDecoderInitialized, onAudioInputFormatChanged, onAudioDecoderInitialized.
-- NEW: applyLoudnessEnhancer() — LoudnessEnhancer with setTargetGain(200 mB)
-  (~2dB gain, user request "200声音增益"), applied lazily on STATE_READY.
-- PlayerManager.release() properly tears down LoudnessEnhancer.
 
 Additional changes:
 - HTTP connect timeout: 5s→15s, read timeout: 12s→20s (P0-like tolerance).
@@ -85,7 +82,6 @@ Cannot compile or deploy from this machine (no JDK). Next session must:
 3. Test channel switching, monitor logcat:
    `adb logcat -s PlayerManager MainActivity`
 4. Verify:
-   - LoudnessEnhancer applied (log: "LoudnessEnhancer applied: gain=200 mB")
    - Decoder info collected (log: "Video decoder: ...", "Audio decoder: ...")
    - PARSING_CONTAINER_UNSUPPORTED triggers content-type retry
    - BEHIND_LIVE_WINDOW triggers seekToDefaultPosition
@@ -98,7 +94,7 @@ Cannot compile or deploy from this machine (no JDK). Next session must:
 - fmt=ts2hls HLS timeline discontinuity — READY_STALL 300s timeout handles it.
 
 === Architecture Notes (updated) ===
-- PlayerManager.kt: ExoPlayer singleton + LoudnessEnhancer + decoder info + content-type retry.
+- PlayerManager.kt: ExoPlayer singleton + decoder info + content-type retry.
 - PlayableHostStore.kt: (NEW) SharedPreferences-based source host memory.
 - ChannelSwitcher.kt: Smart source selection (P0) + load timeout (P2).
 - MainActivity.kt: SurfaceView (P3) + PlayableHostStore wiring.

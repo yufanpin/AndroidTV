@@ -1,7 +1,6 @@
 package com.tivimatelite.player
 
 import android.content.Context
-import android.media.audiofx.LoudnessEnhancer
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
@@ -34,9 +33,6 @@ object PlayerManager {
     private const val USER_AGENT = "TiviMateLite/1.0 (AndroidTV; ExoPlayer)"
     private const val CONNECT_TIMEOUT_MS = 15_000  // P0: 放宽到 15s 防止慢源误判
     private const val READ_TIMEOUT_MS = 20_000     // P0: 放宽到 20s
-    // P5: 响度增强器增益（毫贝尔），200 ≈ 2dB，用户要求"200声音增益"
-    private const val LOUDNESS_GAIN_MILLIBELS = 200
-
     @Volatile
     private var player: ExoPlayer? = null
     // 保存 applicationContext 供异步回调使用（ExoPlayer 接口无 applicationContext）
@@ -44,8 +40,6 @@ object PlayerManager {
 
     // P1: 记录当前 URL 已尝试过的内容类型（用于 PARSING_CONTAINER_UNSUPPORTED 重试）
     private val contentTypeAttempts = mutableMapOf<String, MutableSet<Int>>()
-    // P5: 响度增强器实例
-    private var loudnessEnhancer: LoudnessEnhancer? = null
     // P5: 解码器元数据（最新）
     @Volatile
     var lastDecoderMetadata: DecoderMetadata = DecoderMetadata()
@@ -125,11 +119,6 @@ object PlayerManager {
 
     fun release() {
         synchronized(this) {
-            loudnessEnhancer?.let {
-                it.enabled = false
-                it.release()
-            }
-            loudnessEnhancer = null
             player?.release()
             player = null
         }
@@ -208,32 +197,6 @@ object PlayerManager {
         AppLogStore.w(TAG, "Audio playback params API not available in current Media3 build")
     }
 
-    /** 应用响度增强器（需在 player 初始化后调用） */
-    private fun applyLoudnessEnhancer(player: ExoPlayer) {
-        try {
-            // 释放旧的实例
-            loudnessEnhancer?.let {
-                it.enabled = false
-                it.release()
-            }
-            loudnessEnhancer = null
-
-            val sessionId = player.audioSessionId
-            if (sessionId == C.AUDIO_SESSION_ID_UNSET) {
-                AppLogStore.w(TAG, "Cannot apply LoudnessEnhancer: audio session not ready")
-                return
-            }
-
-            val enhancer = LoudnessEnhancer(sessionId)
-            enhancer.setTargetGain(LOUDNESS_GAIN_MILLIBELS)
-            enhancer.enabled = true
-            loudnessEnhancer = enhancer
-            AppLogStore.i(TAG, "LoudnessEnhancer applied: gain=${LOUDNESS_GAIN_MILLIBELS} mB, session=$sessionId")
-        } catch (e: Throwable) {
-            AppLogStore.e(TAG, "Failed to apply LoudnessEnhancer", e)
-        }
-    }
-
     private val playbackListener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
             if (isCodecFailure(error)) {
@@ -272,16 +235,7 @@ object PlayerManager {
             AppLogStore.e(TAG, "Playback error captured", error)
         }
 
-        override fun onPlaybackStateChanged(playbackState: Int) {
-            // P5: STATE_READY 时应用响度增强器
-            if (playbackState == Player.STATE_READY) {
-                player?.let { p ->
-                    if (loudnessEnhancer == null) {
-                        applyLoudnessEnhancer(p)
-                    }
-                }
-            }
-        }
+        override fun onPlaybackStateChanged(playbackState: Int) = Unit
 
         override fun onRenderedFirstFrame() {
             AppLogStore.i(TAG, "Rendered first frame")

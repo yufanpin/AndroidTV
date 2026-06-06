@@ -15,7 +15,6 @@ Android TV IPTV 播放器，专为晶晨 S905L3（2GB RAM、Android 9）低端�
 | SurfaceView 渲染（P3） | 裸 SurfaceView 替代 PlayerView，切台无黑闪 |
 | 扩展解码器支持（P4） | EXTENSION_RENDERER_MODE_ON，内置/ffmpeg 解码器兼容 |
 | 解码器信息采集（P5） | AnalyticsListener 实时采集视频/音频解码器名称、分辨率、码率等 |
-| 响度增强 | LoudnessEnhancer 200mB（~2dB）增益，切台后自动应用 |
 | 容器格式自动探测 | 先 auto 让 ExoPlayer 自动推断，失败后 HLS → Progressive 轮换 |
 | Web 后台管理 | NanoHTTPD 内置管理面板（端口 5220），查看日志、管理源 |
 | 文件日志持久化 | 写入 `cacheDir/tivimate_diag.txt`，ADB 断开后仍可拉取 |
@@ -75,7 +74,6 @@ PlayerManager (object, 单例 ExoPlayer)
   ├─ setMediaItem + prepare 切台（不重建 player）
   ├─ P1 容器格式重试链 (auto→HLS→OTHER)
   ├─ P4 EXTENSION_RENDERER_MODE_ON
-  ├─ P5 LoudnessEnhancer (STATE_READY 时懒加载)
   └─ P5 AnalyticsListener 解码器信息采集
 
 ChannelSwitcher
@@ -115,10 +113,6 @@ adb logcat -s PlayerManager MainActivity
 ### 功能验证
 
 ```bash
-# 响度增强器
-adb logcat -s PlayerManager | findstr LoudnessEnhancer
-# → "LoudnessEnhancer applied: gain=200 mB, session=XX"
-
 # 解码器信息
 adb logcat -s PlayerManager | findstr "Video decoder\|Audio decoder"
 # → "Video decoder: OMX.amlogic.hevc.decoder.awesome (init=XXms)"
