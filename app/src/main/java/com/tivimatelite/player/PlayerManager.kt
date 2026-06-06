@@ -26,13 +26,36 @@ import com.tivimatelite.web.AppLogStore
 
 object PlayerManager {
     private const val TAG = "PlayerManager"
-    private const val MIN_BUFFER_MS = 15_000
-    private const val MAX_BUFFER_MS = 45_000
-    private const val PLAYBACK_BUFFER_MS = 3_000
-    private const val REBUFFER_MS = 8_000
     private const val USER_AGENT = "TiviMateLite/1.0 (AndroidTV; ExoPlayer)"
     private const val CONNECT_TIMEOUT_MS = 15_000  // P0: 放宽到 15s 防止慢源误判
     private const val READ_TIMEOUT_MS = 20_000     // P0: 放宽到 20s
+
+    enum class BufferProfile(
+        val minBufferMs: Int,
+        val maxBufferMs: Int,
+        val playbackBufferMs: Int,
+        val rebufferMs: Int
+    ) {
+        FAST_SWITCH(5_000, 20_000, 2_000, 3_000),
+        BALANCED(15_000, 45_000, 3_000, 8_000),
+        STABLE(30_000, 90_000, 5_000, 15_000)
+    }
+
+    enum class DecoderFallbackPolicy(
+        val extensionRendererMode: Int,
+        val enableDecoderFallback: Boolean
+    ) {
+        HW_ONLY(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF, true),
+        HW_WITH_SW_FALLBACK(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON, true),
+        SW_PREFERRED(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, true)
+    }
+
+    @Volatile
+    private var bufferProfile = BufferProfile.BALANCED
+
+    @Volatile
+    private var decoderFallbackPolicy = DecoderFallbackPolicy.HW_ONLY
+
     @Volatile
     private var player: ExoPlayer? = null
     // 保存 applicationContext 供异步回调使用（ExoPlayer 接口无 applicationContext）
@@ -117,6 +140,18 @@ object PlayerManager {
         player?.pause()
     }
 
+    fun setBufferProfile(profile: BufferProfile) {
+        bufferProfile = profile
+    }
+
+    fun getBufferProfile(): BufferProfile = bufferProfile
+
+    fun setDecoderFallbackPolicy(policy: DecoderFallbackPolicy) {
+        decoderFallbackPolicy = policy
+    }
+
+    fun getDecoderFallbackPolicy(): DecoderFallbackPolicy = decoderFallbackPolicy
+
     fun release() {
         synchronized(this) {
             player?.release()
@@ -128,10 +163,10 @@ object PlayerManager {
     private fun buildPlayer(context: Context): ExoPlayer {
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                MIN_BUFFER_MS,
-                MAX_BUFFER_MS,
-                PLAYBACK_BUFFER_MS,
-                REBUFFER_MS
+                bufferProfile.minBufferMs,
+                bufferProfile.maxBufferMs,
+                bufferProfile.playbackBufferMs,
+                bufferProfile.rebufferMs
             )
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
@@ -155,8 +190,8 @@ object PlayerManager {
         // NextLib FFmpeg 软解在 S905L3 (2GB) 上 CPU 无法实时出帧，弃用
         // 依赖硬件解码器（OMX.amlogic.*）确保视频正常渲染
         val renderersFactory = AmlogicRenderersFactory(context).apply {
-            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
-            setEnableDecoderFallback(true)
+            setExtensionRendererMode(decoderFallbackPolicy.extensionRendererMode)
+            setEnableDecoderFallback(decoderFallbackPolicy.enableDecoderFallback)
             enableAudioOutputPlaybackParameters(this)
         }
 

@@ -24,26 +24,32 @@ object M3U8Parser {
                         pendingInfo != null && line.isNotEmpty() && !line.startsWith("#") -> {
                             val info = pendingInfo
                             pendingInfo = null
-                            send(
-                                Channel(
-                                    name = info.name,
-                                    logoUrl = info.logoUrl,
-                                    groupName = info.groupName,
-                                    streamUrl = line,
-                                    epgText = info.groupName ?: "No EPG data"
+                            for (streamUrl in splitSources(line)) {
+                                send(
+                                    Channel(
+                                        name = info.name,
+                                        logoUrl = info.logoUrl,
+                                        groupName = info.groupName,
+                                        streamUrl = streamUrl,
+                                        epgText = info.groupName ?: "No EPG data"
+                                    )
                                 )
-                            )
+                            }
                         }
                         pendingInfo == null && line.isSimpleChannelLine() -> {
                             val separator = line.indexOf(URL_SEPARATOR)
-                            send(
-                                Channel(
-                                    name = line.substring(0, separator).trim(),
-                                    logoUrl = null,
-                                    groupName = null,
-                                    streamUrl = line.substring(separator + 1).trim()
+                            val name = line.substring(0, separator).trim()
+                            val rawSources = line.substring(separator + 1).trim()
+                            for (streamUrl in splitSources(rawSources)) {
+                                send(
+                                    Channel(
+                                        name = name,
+                                        logoUrl = null,
+                                        groupName = null,
+                                        streamUrl = streamUrl
+                                    )
                                 )
-                            )
+                            }
                         }
                     }
                 }
@@ -78,6 +84,13 @@ object M3U8Parser {
             logoUrl = logoUrl,
             groupName = groupName
         )
+    }
+
+    private fun splitSources(rawSources: String): List<String> {
+        return rawSources
+            .split('#')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
     }
 
     private data class ExtInfInfo(

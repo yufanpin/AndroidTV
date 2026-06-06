@@ -10,9 +10,15 @@ object FileLogStore {
     private const val TAG = "FileLogStore"
     private const val MAX_SIZE = 512 * 1024
     private const val FILE_NAME = "tivimate_diag.txt"
+    private const val FLUSH_INTERVAL_MS = 2000L
+    private const val FLUSH_LINE_THRESHOLD = 10
 
     private var logFile: File? = null
     private var initialized = false
+    private val lock = Any()
+    private val pendingLines = StringBuilder()
+    private var pendingLineCount = 0
+    private var lastFlushAtMs = 0L
 
     fun init(context: Context) {
         logFile = File(context.cacheDir, FILE_NAME)
@@ -26,6 +32,9 @@ object FileLogStore {
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             e(TAG, "UNCAUGHT EXCEPTION on thread: ${thread.name}", throwable)
             try {
+                synchronized(lock) {
+                    flushPendingLocked(logFile ?: return@setDefaultUncaughtExceptionHandler, System.currentTimeMillis())
+                }
                 throwable.printStackTrace(java.io.PrintStream(logFile?.outputStream() ?: return@setDefaultUncaughtExceptionHandler))
             } catch (_: Exception) {}
             if (prevHandler != null && prevHandler !== Thread.getDefaultUncaughtExceptionHandler()) {
@@ -57,14 +66,29 @@ object FileLogStore {
         val file = logFile ?: return
         try {
             val line = "${dateFmt.format(Date())} $level/$tag: $msg\n"
-            if (file.exists() && file.length() > MAX_SIZE) {
-                file.delete()
-            }
-            java.io.FileOutputStream(file, true).use { fos ->
-                fos.write(line.toByteArray())
-                fos.flush()
+            synchronized(lock) {
+                pendingLines.append(line)
+                pendingLineCount += 1
+                val nowMs = System.currentTimeMillis()
+                if (pendingLineCount >= FLUSH_LINE_THRESHOLD || nowMs - lastFlushAtMs >= FLUSH_INTERVAL_MS) {
+                    flushPendingLocked(file, nowMs)
+                }
             }
         } catch (_: Exception) {
         }
+    }
+
+    private fun flushPendingLocked(file: File, nowMs: Long) {
+        if (pendingLineCount == 0) return
+        if (file.exists() && file.length() > MAX_SIZE) {
+            file.delete()
+        }
+        java.io.FileOutputStream(file, true).use { fos ->
+            fos.write(pendingLines.toString().toByteArray())
+            fos.flush()
+        }
+        pendingLines.setLength(0)
+        pendingLineCount = 0
+        lastFlushAtMs = nowMs
     }
 }

@@ -24,6 +24,7 @@ class ChannelSwitcher(
     private val logError: (String) -> Unit,
     private val getNowMs: () -> Long,
     private val isPlayerBufferingAndPlaying: () -> Boolean,
+    private val precheckSource: suspend (String) -> String? = { it },
     // P0: 智能线路记忆 - 获取可播放域名集合
     private val getPlayableHosts: () -> Set<String> = { emptySet() }
 ) {
@@ -35,6 +36,7 @@ class ChannelSwitcher(
     private var switchDebounceJob: Job? = null
     private var singleSourceRetryJob: Job? = null
     private var bufferingFailoverJob: Job? = null
+    private var playAttemptJob: Job? = null
     // P2: 15s 加载超时计时器
     private var loadTimeoutJob: Job? = null
 
@@ -95,15 +97,23 @@ class ChannelSwitcher(
 
         val sourceIndex = getCurrentSourceIndex()
         val sourceUrl = group.sources[sourceIndex]
-        try {
-            playUrl(sourceUrl, forceHls)
-            savePlayback(group.name, sourceIndex, sourceUrl)
-            val modeSuffix = if (forceHls) " (forced HLS)" else ""
-            logInfo("Playing ${group.name} source ${sourceIndex + 1}/${group.sources.size}$modeSuffix")
-        } catch (_: Throwable) {
-            logError("playCurrentSource failed")
-            playNextSourceForCurrentChannel("play_call_failed")
-            return
+        playAttemptJob?.cancel()
+        playAttemptJob = scope.launch {
+            try {
+                val checkedUrl = precheckSource(sourceUrl)
+                if (checkedUrl == null) {
+                    logWarning("Pre-check failed for ${group.name} source ${sourceIndex + 1}/${group.sources.size}")
+                    playNextSourceForCurrentChannel("source_precheck_failed")
+                    return@launch
+                }
+                playUrl(checkedUrl, forceHls)
+                savePlayback(group.name, sourceIndex, sourceUrl)
+                val modeSuffix = if (forceHls) " (forced HLS)" else ""
+                logInfo("Playing ${group.name} source ${sourceIndex + 1}/${group.sources.size}$modeSuffix")
+            } catch (_: Throwable) {
+                logError("playCurrentSource failed")
+                playNextSourceForCurrentChannel("play_call_failed")
+            }
         }
     }
 
@@ -221,6 +231,7 @@ class ChannelSwitcher(
     fun cancel() {
         switchDebounceJob?.cancel()
         singleSourceRetryJob?.cancel()
+        playAttemptJob?.cancel()
         cancelBufferingFailover()
         cancelLoadTimeout()
     }

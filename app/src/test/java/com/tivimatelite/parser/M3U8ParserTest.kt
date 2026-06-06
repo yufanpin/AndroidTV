@@ -150,4 +150,35 @@ class M3U8ParserTest {
         assertEquals("央视", result[0].epgText)
         assertEquals("No EPG data", result[1].epgText)
     }
+
+    @Test
+    fun `parse splits multi source stream urls separated by hash`() = runTest {
+        val m3u = """
+            #EXTM3U
+            #EXTINF:-1 tvg-name="CCTV 1" group-title="央视",CCTV 1
+            http://example.com/1.m3u8#http://example.com/1-backup.m3u8
+        """.trimIndent()
+        val input = ByteArrayInputStream(m3u.toByteArray())
+        val result = M3U8Parser.parse(input).toList()
+
+        assertEquals(2, result.size)
+        assertEquals("http://example.com/1.m3u8", result[0].streamUrl)
+        assertEquals("http://example.com/1-backup.m3u8", result[1].streamUrl)
+        assertEquals("CCTV 1", result[0].name)
+        assertEquals("CCTV 1", result[1].name)
+    }
+
+    @Test
+    fun `parse splits simple channel line multi source urls separated by hash`() = runTest {
+        val m3u = """
+            #EXTM3U
+            CCTV 1,http://example.com/1.m3u8#http://example.com/1b.m3u8
+        """.trimIndent()
+        val input = ByteArrayInputStream(m3u.toByteArray())
+        val result = M3U8Parser.parse(input).toList()
+
+        assertEquals(2, result.size)
+        assertEquals("http://example.com/1.m3u8", result[0].streamUrl)
+        assertEquals("http://example.com/1b.m3u8", result[1].streamUrl)
+    }
 }

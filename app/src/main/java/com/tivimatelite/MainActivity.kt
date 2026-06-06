@@ -22,15 +22,18 @@ import com.tivimatelite.player.PlayableHostStore
 import com.tivimatelite.player.PlayerManager
 import com.tivimatelite.player.PlaybackHistoryStore
 import com.tivimatelite.switcher.ChannelSwitcher
+import com.tivimatelite.util.HttpFetcher
 import com.tivimatelite.web.AppLogStore
 import com.tivimatelite.web.FileLogStore
 import com.tivimatelite.web.LocalAdminServerManager
 import com.tivimatelite.web.PlaylistStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(UnstableApi::class)
 class MainActivity : AppCompatActivity() {
@@ -51,6 +54,9 @@ class MainActivity : AppCompatActivity() {
     private var lastReadyStallRecoveryAtMs = 0L
     private var lastPlaylistFingerprint: String? = null
     private var activePlaylistSource = "local assets/channels.m3u"
+    private var currentPlayRequestAtMs = 0L
+    private var currentPlayRequestUrl: String? = null
+    private val sourceLatencyMsByUrl = linkedMapOf<String, Long>()
 
     /** SurfaceHolder.Callback ȷ�����洴��/�ؽ�ʱ������ʱ��棬�ƹ� Amlogic HWC ������� bug */
     private val surfaceCallback = object : SurfaceHolder.Callback {
@@ -94,6 +100,9 @@ class MainActivity : AppCompatActivity() {
                     val player = PlayerManager.getPlayer(this@MainActivity)
                     val url = player.currentMediaItem?.localConfiguration?.uri?.toString()
                     if (url != null) {
+                        if (url == currentPlayRequestUrl && currentPlayRequestAtMs > 0L) {
+                            sourceLatencyMsByUrl[url] = System.currentTimeMillis() - currentPlayRequestAtMs
+                        }
                         PlayableHostStore.addHost(this@MainActivity, url)
                     }
                 }
@@ -145,7 +154,11 @@ class MainActivity : AppCompatActivity() {
             savePlayback = { channelName, sourceIndex, url ->
                 PlaybackHistoryStore.saveLastPlayedChannel(this, channelName, sourceIndex, url)
             },
-            playUrl = { url, forceHls -> PlayerManager.play(this, url, forceHls) },
+            playUrl = { url, forceHls ->
+                currentPlayRequestUrl = url
+                currentPlayRequestAtMs = System.currentTimeMillis()
+                PlayerManager.play(this, url, forceHls)
+            },
             logInfo = { message ->
                 AppLogStore.i(TAG, message)
                 FileLogStore.i(TAG, message)
@@ -159,6 +172,13 @@ class MainActivity : AppCompatActivity() {
             isPlayerBufferingAndPlaying = {
                 val player = PlayerManager.getPlayer(this@MainActivity)
                 player.playbackState == Player.STATE_BUFFERING && player.playWhenReady
+            },
+            precheckSource = { url ->
+                withContext(Dispatchers.IO) {
+                    runCatching { HttpFetcher.probePlayableUrl(url) }
+                        .onFailure { AppLogStore.w(TAG, "Source pre-check failed for $url", it) }
+                        .getOrNull()
+                }
             },
             getPlayableHosts = { PlayableHostStore.getHosts(this@MainActivity) }
         )
@@ -398,6 +418,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         val probe = RemotePlaylistRepository.getLastProbeInfo()
+        val currentUrl = PlayerManager.getPlayer(this).currentMediaItem?.localConfiguration?.uri?.toString()
+        val latencyMs = currentUrl?.let(sourceLatencyMsByUrl::get)
         val text = buildString {
             append("Detected IP: ")
             append(probe.localIp ?: "unknown")
@@ -407,6 +429,15 @@ class MainActivity : AppCompatActivity() {
             append('\n')
             append("Active source: ")
             append(channelSwitcher.describeActiveSource())
+            if (latencyMs != null) {
+                append('\n')
+                append("Source latency: ")
+                append(latencyMs)
+                append(" ms")
+            }
+            append('\n')
+            append("Buffer profile: ")
+            append(PlayerManager.getBufferProfile().name)
         }
 
         binding.backendInfoText.text = text
