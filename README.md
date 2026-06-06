@@ -8,7 +8,7 @@ Android TV IPTV 播放器，专为晶晨 S905L3（2GB RAM、Android 9）低端�
 ## 功能特性
 
 | 特性 | 说明 |
-|---|---|---|
+|---|---|
 | **秒切台（Wave 3）** | 移除串行 HTTP 探测，换台直连 ExoPlayer `prepare()`，节省 350~3650ms/次 |
 | **缓冲策略控制（Wave 2）** | Web 后台可切换 FAST_SWITCH / BALANCED / STABLE 三种缓冲策略 |
 | **解码回退控制（Wave 2）** | Web 后台可切换 HW_ONLY / HW_WITH_SW_FALLBACK / SW_PREFERRED |
