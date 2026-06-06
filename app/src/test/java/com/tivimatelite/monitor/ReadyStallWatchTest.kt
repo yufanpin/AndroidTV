@@ -82,4 +82,72 @@ class ReadyStallWatchTest {
         assertEquals(listOf("ready_stall"), stallSignals)
         watch.cancel()
     }
+
+    @Test
+    fun `ready stall is ignored while player is actively playing`() = runTest {
+        val stallSignals = mutableListOf<String>()
+        val logs = mutableListOf<String>()
+        var snapshot = PlayerSnapshot(
+            isReady = true,
+            playWhenReady = true,
+            currentPositionMs = 1000L,
+            isPlaying = true,
+            bufferedPositionMs = 5000L
+        )
+
+        val watch = ReadyStallWatch(
+            scope = this,
+            getPlayerSnapshot = { snapshot },
+            getNowMs = { testScheduler.currentTime },
+            getTotalRxBytes = { 0L },
+            getPlaylistFingerprint = { "same" },
+            onPlaylistChanged = {},
+            onReadyStallDetected = { stallSignals += it },
+            onSpeedText = {},
+            onHeartbeat = {},
+            logWarning = { logs += it }
+        )
+
+        watch.startReadyStallWatch(lastRecoveryAtMs = 0L)
+        advanceTimeBy(305000)
+        runCurrent()
+
+        assertTrue(stallSignals.isEmpty())
+        watch.cancel()
+    }
+
+    @Test
+    fun `ready stall is ignored while buffer keeps growing`() = runTest {
+        val stallSignals = mutableListOf<String>()
+        var snapshot = PlayerSnapshot(
+            isReady = true,
+            playWhenReady = true,
+            currentPositionMs = 1000L,
+            isPlaying = false,
+            bufferedPositionMs = 5000L
+        )
+
+        val watch = ReadyStallWatch(
+            scope = this,
+            getPlayerSnapshot = { snapshot },
+            getNowMs = { testScheduler.currentTime },
+            getTotalRxBytes = { 0L },
+            getPlaylistFingerprint = { "same" },
+            onPlaylistChanged = {},
+            onReadyStallDetected = { stallSignals += it },
+            onSpeedText = {},
+            onHeartbeat = {},
+            logWarning = { _ -> }
+        )
+
+        watch.startReadyStallWatch(lastRecoveryAtMs = 0L)
+        repeat(61) {
+            advanceTimeBy(5000)
+            snapshot = snapshot.copy(bufferedPositionMs = snapshot.bufferedPositionMs + 2000L)
+            runCurrent()
+        }
+
+        assertTrue(stallSignals.isEmpty())
+        watch.cancel()
+    }
 }

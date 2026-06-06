@@ -9,7 +9,9 @@ import java.util.Locale
 data class PlayerSnapshot(
     val isReady: Boolean,
     val playWhenReady: Boolean,
-    val currentPositionMs: Long
+    val currentPositionMs: Long,
+    val isPlaying: Boolean = false,
+    val bufferedPositionMs: Long = 0L
 )
 
 class ReadyStallWatch(
@@ -81,7 +83,9 @@ class ReadyStallWatch(
     fun startReadyStallWatch(lastRecoveryAtMs: Long) {
         cancelReadyStallWatch()
         readyStallWatchJob = scope.launch {
-            var lastPositionMs = getPlayerSnapshot().currentPositionMs
+            val initialSnapshot = getPlayerSnapshot()
+            var lastPositionMs = initialSnapshot.currentPositionMs
+            var lastBufferedPositionMs = initialSnapshot.bufferedPositionMs
             var stagnantDurationMs = 0L
             var lastReadyStallRecoveryAtMs = lastRecoveryAtMs
 
@@ -92,19 +96,30 @@ class ReadyStallWatch(
 
                 if (nowMs < readyStallIgnoreUntilMs) {
                     lastPositionMs = snapshot.currentPositionMs
+                    lastBufferedPositionMs = snapshot.bufferedPositionMs
                     stagnantDurationMs = 0L
                     continue
                 }
 
                 if (!snapshot.isReady || !snapshot.playWhenReady) {
                     lastPositionMs = snapshot.currentPositionMs
+                    lastBufferedPositionMs = snapshot.bufferedPositionMs
+                    stagnantDurationMs = 0L
+                    continue
+                }
+
+                if (snapshot.isPlaying) {
+                    lastPositionMs = snapshot.currentPositionMs
+                    lastBufferedPositionMs = snapshot.bufferedPositionMs
                     stagnantDurationMs = 0L
                     continue
                 }
 
                 val isAdvancing = snapshot.currentPositionMs > lastPositionMs + READY_STALL_ADVANCE_TOLERANCE_MS
-                if (isAdvancing) {
+                val isBufferGrowing = snapshot.bufferedPositionMs > lastBufferedPositionMs + READY_STALL_ADVANCE_TOLERANCE_MS
+                if (isAdvancing || isBufferGrowing) {
                     lastPositionMs = snapshot.currentPositionMs
+                    lastBufferedPositionMs = snapshot.bufferedPositionMs
                     stagnantDurationMs = 0L
                     continue
                 }
@@ -117,7 +132,14 @@ class ReadyStallWatch(
                     continue
                 }
 
-                logWarning("Detected ready stall, trying next source")
+                logWarning(
+                    "Detected ready stall: state=READY, " +
+                        "isPlaying=${snapshot.isPlaying}, " +
+                        "playWhenReady=${snapshot.playWhenReady}, " +
+                        "position=${snapshot.currentPositionMs}, " +
+                        "buffered=${snapshot.bufferedPositionMs}, " +
+                        "lastHealthyAgo=$stagnantDurationMs"
+                )
                 lastReadyStallRecoveryAtMs = nowMs
                 onReadyStallDetected("ready_stall")
                 return@launch

@@ -169,7 +169,9 @@ class MainActivity : AppCompatActivity() {
                 PlayerSnapshot(
                     isReady = player.playbackState == Player.STATE_READY,
                     playWhenReady = player.playWhenReady,
-                    currentPositionMs = player.currentPosition
+                    currentPositionMs = player.currentPosition,
+                    isPlaying = player.isPlaying,
+                    bufferedPositionMs = player.bufferedPosition
                 )
             },
             getNowMs = { System.currentTimeMillis() },
