@@ -297,18 +297,30 @@ public class AndroidMediaPlayer extends AbstractMediaPlayer {
 
     @Override // tv.danmaku.ijk.media.player.IMediaPlayer
     public void setDataSource(Context context, Uri uri) {
-        this.mInternalMediaPlayer.setDataSource(context, uri);
+        try {
+            this.mInternalMediaPlayer.setDataSource(context, uri);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Override // tv.danmaku.ijk.media.player.IMediaPlayer
     @TargetApi(14)
     public void setDataSource(Context context, Uri uri, Map<String, String> map) {
-        this.mInternalMediaPlayer.setDataSource(context, uri, map);
+        try {
+            this.mInternalMediaPlayer.setDataSource(context, uri, map);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Override // tv.danmaku.ijk.media.player.IMediaPlayer
     public void setDataSource(FileDescriptor fileDescriptor) {
-        this.mInternalMediaPlayer.setDataSource(fileDescriptor);
+        try {
+            this.mInternalMediaPlayer.setDataSource(fileDescriptor);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Override // tv.danmaku.ijk.media.player.IMediaPlayer
@@ -316,10 +328,14 @@ public class AndroidMediaPlayer extends AbstractMediaPlayer {
         this.mDataSource = str;
         Uri parse = Uri.parse(str);
         String scheme = parse.getScheme();
-        if (TextUtils.isEmpty(scheme) || !scheme.equalsIgnoreCase("file")) {
-            this.mInternalMediaPlayer.setDataSource(str);
-        } else {
-            this.mInternalMediaPlayer.setDataSource(parse.getPath());
+        try {
+            if (TextUtils.isEmpty(scheme) || !scheme.equalsIgnoreCase("file")) {
+                this.mInternalMediaPlayer.setDataSource(str);
+            } else {
+                this.mInternalMediaPlayer.setDataSource(parse.getPath());
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
         }
     }
 
