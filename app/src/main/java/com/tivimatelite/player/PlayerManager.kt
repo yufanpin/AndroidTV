@@ -55,9 +55,20 @@ object PlayerManager {
     var currentUrl: String? = null
         private set
 
-    fun getPlayer(context: Context): FSPlayer {
-        return player ?: synchronized(this) {
-            player ?: createPlayer().also { player = it }
+    fun getPlayer(context: Context): FSPlayer? {
+        player?.let { return it }
+        return synchronized(this) {
+            player?.let { return it }
+            runCatching { createPlayer() }
+                .onFailure {
+                    // FSPlayer 的 native_setup 在无可用 Vulkan 渲染器时直接失败，
+                    // 并以误导性的 OutOfMemoryError 抛出（见其实现在 ijkmp_create 返回 NULL 时）。
+                    // 此处兜住 Error，避免整个 App 因播放器构造失败而崩溃。
+                    AppLogStore.e(TAG, "FSPlayer 创建失败（设备可能无可用 Vulkan 渲染器）", it)
+                    events?.onError(IMediaPlayer.MEDIA_ERROR_UNKNOWN, 0)
+                }
+                .getOrNull()
+                ?.also { player = it }
         }
     }
 
@@ -66,7 +77,10 @@ object PlayerManager {
     }
 
     fun play(context: Context, url: String, forceHls: Boolean = false) {
-        val p = getPlayer(context)
+        val p = getPlayer(context) ?: run {
+            AppLogStore.e(TAG, "play() aborted: FSPlayer 不可用，url=$url")
+            return
+        }
         currentUrl = url
         playWhenReady = true
         AppLogStore.i(TAG, "play url=$url forceHls=$forceHls")
