@@ -3,11 +3,11 @@ package com.tivimatelite.player
 import android.content.Context
 import android.view.Surface
 import com.tivimatelite.web.AppLogStore
-import tv.danmaku.ijk.media.player.IMediaPlayer
-import tv.danmaku.ijk.media.player.IjkMediaPlayer
+import com.debugly.fsplayer.player.FSPlayer
+import com.debugly.fsplayer.player.IMediaPlayer
 
 /**
- * IJKPlayer 内核封装（替代原 ExoPlayer/Media3）。
+ * FSPlayer 内核封装（ijkplayer 的活跃维护后继，替代原 ExoPlayer/Media3 与内联 IJK）。
  *
  * 播放参数逐一照抄 DIYP `IjkVideoView.a(I)` 的 setOption 调用
  * （category: 1=FORMAT, 2=CODEC, 3=SWS, 4=PLAYER）。
@@ -35,7 +35,7 @@ object PlayerManager {
     }
 
     @Volatile
-    private var player: IjkMediaPlayer? = null
+    private var player: FSPlayer? = null
 
     @Volatile
     private var events: Events? = null
@@ -55,7 +55,7 @@ object PlayerManager {
     var currentUrl: String? = null
         private set
 
-    fun getPlayer(context: Context): IjkMediaPlayer {
+    fun getPlayer(context: Context): FSPlayer {
         return player ?: synchronized(this) {
             player ?: createPlayer().also { player = it }
         }
@@ -116,9 +116,9 @@ object PlayerManager {
         events?.onStateChanged(next)
     }
 
-    private fun createPlayer(): IjkMediaPlayer {
-        val p = IjkMediaPlayer()
-        runCatching { IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_WARN) }
+    private fun createPlayer(): FSPlayer {
+        val p = FSPlayer()
+        runCatching { FSPlayer.native_setLogLevel(FSPlayer.IJK_LOG_WARN) }
 
         p.setOnPreparedListener { mp ->
             AppLogStore.i(TAG, "onPrepared")
@@ -150,30 +150,30 @@ object PlayerManager {
     }
 
     /** 深浅拷贝自 DIYP：硬解 + 直播低延迟 + 自动重连。 */
-    private fun applyOptions(p: IjkMediaPlayer) {
+    private fun applyOptions(p: FSPlayer) {
         // PLAYER(4)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec_all_videos", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-avc", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-hevc", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg2", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg4", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", OPT_FRAMEDROP)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "overlay-format", OPT_OVERLAY_FORMAT_RV32)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
+        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
+        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "mediacodec_all_videos", 1L)
+        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "mediacodec-avc", 1L)
+        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "mediacodec-hevc", 1L)
+        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg2", 1L)
+        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg4", 1L)
+        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
+        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "framedrop", OPT_FRAMEDROP)
+        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "overlay-format", OPT_OVERLAY_FORMAT_RV32)
+        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
 
         // FORMAT(1)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "user_agent", USER_AGENT)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", OPT_PROBESIZE)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", OPT_ANALYZEDURATION)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", 0L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "delay-optimization", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "cache-buffer-duration", OPT_CACHE_BUFFER_DURATION_MS)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_flags", "prefer_tcp")
+        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "user_agent", USER_AGENT)
+        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "probesize", OPT_PROBESIZE)
+        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", OPT_ANALYZEDURATION)
+        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", 0L)
+        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "delay-optimization", 1L)
+        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "cache-buffer-duration", OPT_CACHE_BUFFER_DURATION_MS)
+        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1L)
+        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "rtsp_flags", "prefer_tcp")
 
         // CODEC(2)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", OPT_SKIP_LOOP_FILTER)
+        p.setOption(FSPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", OPT_SKIP_LOOP_FILTER)
     }
 }
