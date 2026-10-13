@@ -14,6 +14,11 @@ android {
         versionCode = 1
         versionName = "1.0"
         buildConfigField("String", "PLAYLIST_URL", "\"\"")
+
+        ndk {
+            // IJKPlayer 原生库仅提供 armeabi-v7a（晶晨 S905L3）
+            abiFilters += "armeabi-v7a"
+        }
     }
 
     buildFeatures {
@@ -35,12 +40,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
 
-    implementation("androidx.media3:media3-exoplayer:1.7.1")
-    implementation("androidx.media3:media3-exoplayer-hls:1.7.1")
-    implementation("androidx.media3:media3-exoplayer-rtsp:1.7.1")
-    implementation("androidx.media3:media3-ui:1.7.1")
-    implementation("androidx.media3:media3-decoder:1.7.1")
-
+    // 播放内核：IJKPlayer（内联 DIYP 反编译源码 + armeabi-v7a .so），已弃用 Media3/ExoPlayer
 
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")

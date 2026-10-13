@@ -6,11 +6,7 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
 import android.view.SurfaceHolder
-import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
 import com.tivimatelite.data.RemotePlaylistRepository
 import com.tivimatelite.databinding.ActivityMainBinding
 import com.tivimatelite.input.InputHandler
@@ -32,7 +28,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(UnstableApi::class)
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val scope = MainScope()
@@ -55,57 +50,56 @@ class MainActivity : AppCompatActivity() {
     /** SurfaceHolder.Callback ȷ�����洴��/�ؽ�ʱ������ʱ��棬�ƹ� Amlogic HWC ������� bug */
     private val surfaceCallback = object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
-            val player = PlayerManager.getPlayer(this@MainActivity)
-            player.setVideoSurface(holder.surface)
+            PlayerManager.getPlayer(this@MainActivity)
+            PlayerManager.setSurface(holder.surface)
         }
         override fun surfaceChanged(holder: SurfaceHolder, format: Int, w: Int, h: Int) {}
         override fun surfaceDestroyed(holder: SurfaceHolder) {
-            PlayerManager.getPlayer(this@MainActivity).clearVideoSurface()
+            PlayerManager.setSurface(null)
         }
     }
 
-    private val playerListener = object : Player.Listener {
-        override fun onPlayerError(error: PlaybackException) {
-            FileLogStore.w(TAG, "onPlayerError: errorCode=${error.errorCode} ${error.localizedMessage}")
+    private val playerListener = object : PlayerManager.Events {
+        override fun onError(errorWhat: Int, errorExtra: Int) {
+            FileLogStore.w(TAG, "onError what=$errorWhat extra=$errorExtra")
             cancelReadyStallWatch()
             // P0: 记忆移除——线路播放失�?
-            val currentUrl = PlayerManager.getPlayer(this@MainActivity).currentMediaItem?.localConfiguration?.uri?.toString()
+            val currentUrl = PlayerManager.currentUrl
             if (currentUrl != null) {
                 PlayableHostStore.removeHost(this@MainActivity, currentUrl)
                 AppLogStore.i(TAG, "Removed failed host from playable hosts: $currentUrl")
             }
-            if (channelSwitcher.tryForceHlsForCurrentSource(error)) return
-            AppLogStore.w(TAG, "Playback error, trying next source", error)
+            AppLogStore.w(TAG, "Playback error, trying next source")
             channelSwitcher.playNextSourceForCurrentChannel("player_error")
         }
 
-        override fun onPlaybackStateChanged(playbackState: Int) {
-            FileLogStore.i(TAG, "onPlaybackStateChanged: $playbackState")
-            when (playbackState) {
-                Player.STATE_BUFFERING -> {
+        override fun onStateChanged(state: PlayerManager.PlaybackState) {
+            FileLogStore.i(TAG, "onStateChanged: $state")
+            when (state) {
+                PlayerManager.PlaybackState.BUFFERING -> {
                     cancelReadyStallWatch()
                     channelSwitcher.scheduleBufferingFailover()
                 }
-                Player.STATE_READY -> {
+                PlayerManager.PlaybackState.READY -> {
                     channelSwitcher.cancelBufferingFailover()
                     channelSwitcher.cancelLoadTimeout()
                     startReadyStallWatch()
                     // P0: 线路播放成功→记忆域�?
-                    val player = PlayerManager.getPlayer(this@MainActivity)
-                    val url = player.currentMediaItem?.localConfiguration?.uri?.toString()
+                    val url = PlayerManager.currentUrl
                     if (url != null) {
                         PlayableHostStore.addHost(this@MainActivity, url)
                     }
                 }
-                Player.STATE_ENDED -> {
+                PlayerManager.PlaybackState.ENDED -> {
                     cancelReadyStallWatch()
                     channelSwitcher.playNextSourceForCurrentChannel("state_ended")
                 }
+                PlayerManager.PlaybackState.IDLE -> {}
             }
         }
 
-        override fun onPlayerErrorChanged(error: PlaybackException?) {
-            FileLogStore.w(TAG, "onPlayerErrorChanged: ${error?.localizedMessage}")
+        override fun onVideoSizeChanged(width: Int, height: Int, sarNum: Int, sarDen: Int) {
+            FileLogStore.i(TAG, "onVideoSizeChanged: ${width}x$height sar=$sarNum:$sarDen")
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -157,21 +151,19 @@ class MainActivity : AppCompatActivity() {
             },
             getNowMs = { System.currentTimeMillis() },
             isPlayerBufferingAndPlaying = {
-                val player = PlayerManager.getPlayer(this@MainActivity)
-                player.playbackState == Player.STATE_BUFFERING && player.playWhenReady
+                PlayerManager.playbackState == PlayerManager.PlaybackState.BUFFERING && PlayerManager.playWhenReady
             },
             getPlayableHosts = { PlayableHostStore.getHosts(this@MainActivity) }
         )
         readyStallWatch = ReadyStallWatch(
             scope = scope,
             getPlayerSnapshot = {
-                val player = PlayerManager.getPlayer(this@MainActivity)
                 PlayerSnapshot(
-                    isReady = player.playbackState == Player.STATE_READY,
-                    playWhenReady = player.playWhenReady,
-                    currentPositionMs = player.currentPosition,
-                    isPlaying = player.isPlaying,
-                    bufferedPositionMs = player.bufferedPosition
+                    isReady = PlayerManager.playbackState == PlayerManager.PlaybackState.READY,
+                    playWhenReady = PlayerManager.playWhenReady,
+                    currentPositionMs = PlayerManager.currentPositionMs(),
+                    isPlaying = PlayerManager.isPlaying(),
+                    bufferedPositionMs = PlayerManager.bufferedPositionMs()
                 )
             },
             getNowMs = { System.currentTimeMillis() },
@@ -197,8 +189,7 @@ class MainActivity : AppCompatActivity() {
             channelNumberText = binding.channelNumberText
         )
 
-        val player = PlayerManager.getPlayer(this)
-        player.addListener(playerListener)
+        PlayerManager.setEvents(playerListener)
         // Register SurfaceHolder.Callback ONCE �� never removed, ensures surface lifecycle is tracked
         binding.playerSurface.holder.addCallback(surfaceCallback)
         attachPlayerSurface()
@@ -280,9 +271,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         FileLogStore.i(TAG, "onDestroy isFinishing=$isFinishing")
-        val player = PlayerManager.getPlayer(this)
-        player.removeListener(playerListener)
-        player.clearVideoSurfaceView(binding.playerSurface)
+        PlayerManager.setEvents(null)
+        PlayerManager.setSurface(null)
         binding.playerSurface.alpha = 0f
         backendInfoHideJob?.cancel()
         reloadChannelsJob?.cancel()
@@ -382,10 +372,10 @@ class MainActivity : AppCompatActivity() {
         // Using setVideoSurface(holder.surface) directly instead of setVideoSurfaceView()
         // to bypass the Amlogic phantom-surface bug where holder.getSurface() returns stale surface
         binding.playerSurface.post {
-            val player = PlayerManager.getPlayer(this@MainActivity)
+            PlayerManager.getPlayer(this@MainActivity)
             val surface = binding.playerSurface.holder.surface
             if (surface?.isValid == true) {
-                player.setVideoSurface(surface)
+                PlayerManager.setSurface(surface)
             }
             binding.playerSurface.requestFocus()
         }

@@ -1,119 +1,90 @@
 package com.tivimatelite.player
 
 import android.content.Context
-import androidx.media3.common.C
-import androidx.media3.common.Format
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.common.VideoSize
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.exoplayer.DecoderReuseEvaluation
-import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.DefaultRenderersFactory
-import androidx.media3.exoplayer.ExoPlayer
-
-import androidx.media3.exoplayer.analytics.AnalyticsListener
-import androidx.media3.exoplayer.hls.HlsMediaSource
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.exoplayer.source.LoadEventInfo
-import androidx.media3.exoplayer.source.MediaLoadData
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import android.view.Surface
 import com.tivimatelite.web.AppLogStore
+import tv.danmaku.ijk.media.player.IMediaPlayer
+import tv.danmaku.ijk.media.player.IjkMediaPlayer
 
+/**
+ * IJKPlayer 内核封装（替代原 ExoPlayer/Media3）。
+ *
+ * 播放参数逐一照抄 DIYP `IjkVideoView.a(I)` 的 setOption 调用
+ * （category: 1=FORMAT, 2=CODEC, 3=SWS, 4=PLAYER）。
+ */
 object PlayerManager {
     private const val TAG = "PlayerManager"
-    private const val MIN_BUFFER_MS = 15_000
-    private const val MAX_BUFFER_MS = 45_000
-    private const val PLAYBACK_BUFFER_MS = 3_000
-    private const val REBUFFER_MS = 8_000
-    private const val USER_AGENT = "TiviMateLite/1.0 (AndroidTV; ExoPlayer)"
-    private const val CONNECT_TIMEOUT_MS = 15_000  // P0: 放宽到 15s 防止慢源误判
-    private const val READ_TIMEOUT_MS = 20_000     // P0: 放宽到 20s
-    @Volatile
-    private var player: ExoPlayer? = null
-    // 保存 applicationContext 供异步回调使用（ExoPlayer 接口无 applicationContext）
-    private var appContext: Context? = null
 
-    // P1: 记录当前 URL 已尝试过的内容类型（用于 PARSING_CONTAINER_UNSUPPORTED 重试）
-    private val contentTypeAttempts = mutableMapOf<String, MutableSet<Int>>()
-    // P5: 解码器元数据（最新）
+    // ---- 照抄 DIYP 的 setOption 参数（见 IjkVideoView.smali L676-791）----
+    private const val USER_AGENT = "SYTV/1.6"
+    private const val OPT_PROBESIZE = "1024000"
+    private const val OPT_ANALYZEDURATION = "2000000"
+    private const val OPT_CACHE_BUFFER_DURATION_MS = 20_000L   // 0x4e20
+    private const val OPT_SKIP_LOOP_FILTER = 48L               // 0x30, CODEC 类别
+    private const val OPT_FRAMEDROP = 5L
+    private const val OPT_OVERLAY_FORMAT_RV32 = 842225234L     // SDL_FCC_RV32
+
+    enum class PlaybackState { IDLE, BUFFERING, READY, ENDED }
+
+    /** 播放事件回调（替代 ExoPlayer 的 Player.Listener）。 */
+    interface Events {
+        fun onError(errorWhat: Int, errorExtra: Int)
+        fun onStateChanged(state: PlaybackState)
+        fun onIsPlayingChanged(isPlaying: Boolean)
+        fun onVideoSizeChanged(width: Int, height: Int, sarNum: Int, sarDen: Int)
+    }
+
     @Volatile
-    var lastDecoderMetadata: DecoderMetadata = DecoderMetadata()
+    private var player: IjkMediaPlayer? = null
+
+    @Volatile
+    private var events: Events? = null
+
+    @Volatile
+    private var currentSurface: Surface? = null
+
+    @Volatile
+    var playbackState: PlaybackState = PlaybackState.IDLE
         private set
 
-    data class DecoderMetadata(
-        val videoMimeType: String = "",
-        val videoWidth: Int = 0,
-        val videoHeight: Int = 0,
-        val videoFrameRate: Float = 0f,
-        val videoBitrate: Int = 0,
-        val videoDecoder: String = "",
-        val audioMimeType: String = "",
-        val audioChannels: Int = 0,
-        val audioSampleRate: Int = 0,
-        val audioDecoder: String = ""
-    )
+    @Volatile
+    var playWhenReady: Boolean = false
+        private set
 
-    fun getPlayer(context: Context): ExoPlayer {
-        appContext = context.applicationContext
+    @Volatile
+    var currentUrl: String? = null
+        private set
+
+    fun getPlayer(context: Context): IjkMediaPlayer {
         return player ?: synchronized(this) {
-            player ?: buildPlayer(context.applicationContext).also { player = it }
+            player ?: createPlayer().also { player = it }
         }
     }
 
-    @OptIn(UnstableApi::class)
+    fun setEvents(value: Events?) {
+        events = value
+    }
+
     fun play(context: Context, url: String, forceHls: Boolean = false) {
-        val exoPlayer = getPlayer(context)
-
-        // P1: 记录当前 URL（用于容器类型重试）
-        val mediaItemBuilder = MediaItem.Builder().setUri(url)
-
-        // 清除旧 URL 的内容类型尝试记录
-        contentTypeAttempts.keys.removeAll { it != url }
-
-        // 确定内容类型
-        val contentType: Int = when {
-            forceHls -> {
-                mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
-                AppLogStore.i(TAG, "Force HLS for current source")
-                C.CONTENT_TYPE_HLS
-            }
-            else -> C.CONTENT_TYPE_OTHER // 让 ExoPlayer 自动推断
+        val p = getPlayer(context)
+        currentUrl = url
+        playWhenReady = true
+        AppLogStore.i(TAG, "play url=$url forceHls=$forceHls")
+        setState(PlaybackState.BUFFERING)
+        runCatching {
+            p.reset()
+            applyOptions(p)
+            currentSurface?.let { p.setSurface(it) }
+            p.setDataSource(url)
+            p.prepareAsync()
+        }.onFailure {
+            AppLogStore.e(TAG, "play() failed for $url", it)
+            events?.onError(IMediaPlayer.MEDIA_ERROR_UNKNOWN, 0)
         }
-
-        val mediaItem = mediaItemBuilder.build()
-        contentTypeAttempts.getOrPut(url) { mutableSetOf() }.add(contentType)
-
-        // 使用 MediaSource 来支持容器类型重试
-        if (contentType != C.CONTENT_TYPE_OTHER) {
-            val dataSourceFactory = DefaultDataSource.Factory(
-                context,
-                DefaultHttpDataSource.Factory()
-                    .setUserAgent(USER_AGENT)
-                    .setAllowCrossProtocolRedirects(true)
-                    .setConnectTimeoutMs(CONNECT_TIMEOUT_MS)
-                    .setReadTimeoutMs(READ_TIMEOUT_MS)
-                    .setKeepPostFor302Redirects(true)
-                    .setDefaultRequestProperties(mapOf("Accept" to "*/*", "Connection" to "keep-alive"))
-            )
-            val mediaSource = when (contentType) {
-                C.CONTENT_TYPE_HLS -> HlsMediaSource.Factory(dataSourceFactory).createMediaSource(mediaItem)
-                else -> ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(mediaItem)
-            }
-            exoPlayer.setMediaSource(mediaSource)
-        } else {
-            exoPlayer.setMediaItem(mediaItem)
-        }
-
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
     }
 
     fun pause() {
+        playWhenReady = false
         player?.pause()
     }
 
@@ -122,206 +93,87 @@ object PlayerManager {
             player?.release()
             player = null
         }
+        currentUrl = null
+        playWhenReady = false
+        setState(PlaybackState.IDLE)
     }
 
-    @OptIn(UnstableApi::class)
-    private fun buildPlayer(context: Context): ExoPlayer {
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                MIN_BUFFER_MS,
-                MAX_BUFFER_MS,
-                PLAYBACK_BUFFER_MS,
-                REBUFFER_MS
-            )
-            .setPrioritizeTimeOverSizeThresholds(true)
-            .build()
+    fun setSurface(surface: Surface?) {
+        currentSurface = surface
+        player?.setSurface(surface)
+    }
 
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent(USER_AGENT)
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(CONNECT_TIMEOUT_MS)
-            .setReadTimeoutMs(READ_TIMEOUT_MS)
-            .setKeepPostFor302Redirects(true)
-            .setDefaultRequestProperties(
-                mapOf(
-                    "Accept" to "*/*",
-                    "Connection" to "keep-alive"
-                )
-            )
+    fun currentPositionMs(): Long = runCatching { player?.currentPosition ?: 0L }.getOrDefault(0L)
 
-        val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+    /** IJK 的视频缓存时长(ms)，作为 bufferedPosition 的近似。 */
+    fun bufferedPositionMs(): Long = runCatching { player?.videoCachedDuration ?: 0L }.getOrDefault(0L)
 
-        // P4: 使用 DefaultRenderersFactory
-        // NextLib FFmpeg 软解在 S905L3 (2GB) 上 CPU 无法实时出帧，弃用
-        // 依赖硬件解码器（OMX.amlogic.*）确保视频正常渲染
-        val renderersFactory = AmlogicRenderersFactory(context).apply {
-            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
-            setEnableDecoderFallback(true)
-            enableAudioOutputPlaybackParameters(this)
+    fun isPlaying(): Boolean = runCatching { player?.isPlaying ?: false }.getOrDefault(false)
+
+    private fun setState(next: PlaybackState) {
+        if (playbackState == next) return
+        playbackState = next
+        events?.onStateChanged(next)
+    }
+
+    private fun createPlayer(): IjkMediaPlayer {
+        val p = IjkMediaPlayer()
+        runCatching { IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_WARN) }
+
+        p.setOnPreparedListener { mp ->
+            AppLogStore.i(TAG, "onPrepared")
+            setState(PlaybackState.READY)
+            runCatching { mp.start() }
         }
-
-        return ExoPlayer.Builder(context)
-            .setLoadControl(loadControl)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
-            .setRenderersFactory(renderersFactory)
-            .build()
-            .apply {
-                addListener(playbackListener)
-                addAnalyticsListener(codecAnalyticsListener)
-                // P5: 解码器信息监听器
-                addAnalyticsListener(decoderInfoListener)
+        p.setOnErrorListener { _, what, extra ->
+            AppLogStore.w(TAG, "onError what=$what extra=$extra")
+            setState(PlaybackState.IDLE)
+            events?.onError(what, extra)
+            true
+        }
+        p.setOnCompletionListener {
+            AppLogStore.i(TAG, "onCompletion")
+            setState(PlaybackState.ENDED)
+        }
+        p.setOnInfoListener { _, what, extra ->
+            when (what) {
+                IMediaPlayer.MEDIA_INFO_BUFFERING_START -> setState(PlaybackState.BUFFERING)
+                IMediaPlayer.MEDIA_INFO_BUFFERING_END -> setState(PlaybackState.READY)
             }
+            true
+        }
+        p.setOnVideoSizeChangedListener { _, width, height, sarNum, sarDen ->
+            AppLogStore.i(TAG, "videoSize ${width}x$height sar=$sarNum:$sarDen")
+            events?.onVideoSizeChanged(width, height, sarNum, sarDen)
+        }
+        return p
     }
 
-    private fun enableAudioOutputPlaybackParameters(renderersFactory: DefaultRenderersFactory) {
-        val factoryClass = renderersFactory.javaClass
-        val booleanType = Boolean::class.javaPrimitiveType ?: return
-        val methodNames = listOf(
-            "setEnableAudioOutputPlaybackParameters",
-            "setEnableAudioTrackPlaybackParams"
-        )
+    /** 深浅拷贝自 DIYP：硬解 + 直播低延迟 + 自动重连。 */
+    private fun applyOptions(p: IjkMediaPlayer) {
+        // PLAYER(4)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec_all_videos", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-avc", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-hevc", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg2", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg4", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", OPT_FRAMEDROP)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "overlay-format", OPT_OVERLAY_FORMAT_RV32)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
 
-        for (methodName in methodNames) {
-            val method = runCatching { factoryClass.getMethod(methodName, booleanType) }.getOrNull()
-                ?: continue
-            runCatching { method.invoke(renderersFactory, true) }
-                .onSuccess {
-                    AppLogStore.i(TAG, "Enabled audio playback params via $methodName")
-                }
-                .onFailure {
-                    AppLogStore.w(TAG, "Failed to enable audio playback params via $methodName", it)
-                }
-            return
-        }
+        // FORMAT(1)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "user_agent", USER_AGENT)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", OPT_PROBESIZE)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", OPT_ANALYZEDURATION)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", 0L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "delay-optimization", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "cache-buffer-duration", OPT_CACHE_BUFFER_DURATION_MS)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_flags", "prefer_tcp")
 
-        AppLogStore.w(TAG, "Audio playback params API not available in current Media3 build")
-    }
-
-    private val playbackListener = object : Player.Listener {
-        override fun onPlayerError(error: PlaybackException) {
-            if (isCodecFailure(error)) {
-                AppLogStore.e(TAG, "Hardware decoder failure captured", error)
-                player?.stop()
-                return
-            }
-
-            // P1: BEHIND_LIVE_WINDOW → 跳到默认位置重试
-            if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
-                AppLogStore.w(TAG, "Behind live window, seeking to default position")
-                player?.seekToDefaultPosition()
-                player?.prepare()
-                return
-            }
-
-            // P1: PARSING_CONTAINER_UNSUPPORTED → 换内容类型重试
-            val currentUrl = player?.currentMediaItem?.localConfiguration?.uri?.toString()
-            if (error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED
-                && currentUrl != null
-            ) {
-                val attempts = contentTypeAttempts.getOrPut(currentUrl) { mutableSetOf() }
-                val nextType = when {
-                    C.CONTENT_TYPE_HLS !in attempts -> C.CONTENT_TYPE_HLS
-                    C.CONTENT_TYPE_OTHER !in attempts -> C.CONTENT_TYPE_OTHER
-                    else -> null
-                }
-                if (nextType != null) {
-                    AppLogStore.w(TAG, "Container unsupported, retrying as type=$nextType")
-                    val context = appContext ?: return
-                    play(context, currentUrl, forceHls = nextType == C.CONTENT_TYPE_HLS)
-                    return
-                }
-            }
-
-            AppLogStore.e(TAG, "Playback error captured", error)
-        }
-
-        override fun onPlaybackStateChanged(playbackState: Int) = Unit
-
-        override fun onRenderedFirstFrame() {
-            AppLogStore.i(TAG, "Rendered first frame")
-        }
-
-        override fun onVideoSizeChanged(videoSize: VideoSize) {
-            AppLogStore.i(TAG, "Video size changed: ${videoSize.width}x${videoSize.height}")
-        }
-    }
-
-    private val codecAnalyticsListener = object : AnalyticsListener {
-        override fun onLoadError(
-            eventTime: AnalyticsListener.EventTime,
-            loadEventInfo: LoadEventInfo,
-            mediaLoadData: MediaLoadData,
-            error: java.io.IOException,
-            wasCanceled: Boolean
-        ) {
-            AppLogStore.w(TAG, "Stream load error captured", error)
-        }
-    }
-
-    // P5: 解码器信息采集
-    @OptIn(UnstableApi::class)
-    private val decoderInfoListener = object : AnalyticsListener {
-        override fun onVideoInputFormatChanged(
-            eventTime: AnalyticsListener.EventTime,
-            format: Format,
-            decoderReuseEvaluation: DecoderReuseEvaluation?
-        ) {
-            lastDecoderMetadata = lastDecoderMetadata.copy(
-                videoMimeType = format.sampleMimeType ?: "",
-                videoWidth = format.width,
-                videoHeight = format.height,
-                videoFrameRate = format.frameRate,
-                videoBitrate = format.bitrate,
-            )
-            AppLogStore.i(TAG, "Video: ${format.sampleMimeType} ${format.width}x${format.height} " +
-                    "${format.frameRate}fps ${format.bitrate}bps")
-        }
-
-        override fun onVideoDecoderInitialized(
-            eventTime: AnalyticsListener.EventTime,
-            decoderName: String,
-            initializedTimestampMs: Long,
-            initializationDurationMs: Long
-        ) {
-            lastDecoderMetadata = lastDecoderMetadata.copy(videoDecoder = decoderName)
-            AppLogStore.i(TAG, "Video decoder: $decoderName (init=${initializationDurationMs}ms)")
-        }
-
-        override fun onAudioInputFormatChanged(
-            eventTime: AnalyticsListener.EventTime,
-            format: Format,
-            decoderReuseEvaluation: DecoderReuseEvaluation?
-        ) {
-            lastDecoderMetadata = lastDecoderMetadata.copy(
-                audioMimeType = format.sampleMimeType ?: "",
-                audioChannels = format.channelCount,
-                audioSampleRate = format.sampleRate,
-            )
-        }
-
-        override fun onAudioDecoderInitialized(
-            eventTime: AnalyticsListener.EventTime,
-            decoderName: String,
-            initializedTimestampMs: Long,
-            initializationDurationMs: Long
-        ) {
-            lastDecoderMetadata = lastDecoderMetadata.copy(audioDecoder = decoderName)
-            AppLogStore.i(TAG, "Audio decoder: $decoderName (init=${initializationDurationMs}ms)")
-        }
-    }
-
-    private fun isCodecFailure(error: Throwable): Boolean {
-        var current: Throwable? = error
-        while (current != null) {
-            val name = current.javaClass.name
-            if (name.contains("MediaCodec", ignoreCase = true) ||
-                name.contains("MediaCodecVideoRenderer", ignoreCase = true) ||
-                name.contains("DecoderInitializationException", ignoreCase = true)
-            ) {
-                return true
-            }
-            current = current.cause
-        }
-        return false
+        // CODEC(2)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", OPT_SKIP_LOOP_FILTER)
     }
 }
