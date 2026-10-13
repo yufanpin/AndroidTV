@@ -37,6 +37,13 @@ object PlayerManager {
     @Volatile
     private var player: FSPlayer? = null
 
+    /**
+     * FSPlayer 构造在无可用 Vulkan 渲染器时会永久失败（见 getPlayer 注释）。
+     * 一旦失败即置位，避免 channelSwitcher 每换一次源就重建播放器导致重试风暴。
+     */
+    @Volatile
+    private var playerCreationFailed = false
+
     @Volatile
     private var events: Events? = null
 
