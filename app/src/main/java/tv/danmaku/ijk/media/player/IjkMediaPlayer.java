@@ -33,6 +33,7 @@ import tv.danmaku.ijk.media.player.annotations.AccessedByNative;
 import tv.danmaku.ijk.media.player.annotations.CalledByNative;
 import tv.danmaku.ijk.media.player.misc.IAndroidIO;
 import tv.danmaku.ijk.media.player.misc.IMediaDataSource;
+import tv.danmaku.ijk.media.player.misc.ITrackInfo;
 import tv.danmaku.ijk.media.player.misc.IjkTrackInfo;
 import tv.danmaku.ijk.media.player.pragma.DebugLog;
 
@@ -530,7 +531,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
         _setStreamSelected(i, false);
     }
 
-    public void finalize() {
+    public void finalize() throws Throwable {
         super.finalize();
         native_finalize();
     }
@@ -669,29 +670,23 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
     @Override // tv.danmaku.ijk.media.player.IMediaPlayer
     public IjkTrackInfo[] getTrackInfo() {
         IjkMediaMeta parse;
-        int i;
         Bundle mediaMeta = getMediaMeta();
         if (mediaMeta == null || (parse = IjkMediaMeta.parse(mediaMeta)) == null || parse.mStreams == null) {
             return null;
         }
-        ArrayList arrayList = new ArrayList();
-        Iterator<IjkMediaMeta.IjkStreamMeta> it = parse.mStreams.iterator();
-        while (it.hasNext()) {
-            IjkMediaMeta.IjkStreamMeta next = it.next();
+        ArrayList<IjkTrackInfo> arrayList = new ArrayList<>();
+        for (IjkMediaMeta.IjkStreamMeta next : parse.mStreams) {
             IjkTrackInfo ijkTrackInfo = new IjkTrackInfo(next);
             if (next.mType.equalsIgnoreCase("video")) {
-                i = 1;
+                ijkTrackInfo.setTrackType(ITrackInfo.MEDIA_TRACK_TYPE_VIDEO);
             } else if (next.mType.equalsIgnoreCase("audio")) {
-                i = 2;
+                ijkTrackInfo.setTrackType(ITrackInfo.MEDIA_TRACK_TYPE_AUDIO);
             } else if (next.mType.equalsIgnoreCase("timedtext")) {
-                i = 3;
-            } else {
-                arrayList.add(ijkTrackInfo);
+                ijkTrackInfo.setTrackType(ITrackInfo.MEDIA_TRACK_TYPE_TIMEDTEXT);
             }
-            ijkTrackInfo.setTrackType(i);
             arrayList.add(ijkTrackInfo);
         }
-        return (IjkTrackInfo[]) arrayList.toArray(new IjkTrackInfo[arrayList.size()]);
+        return arrayList.toArray(new IjkTrackInfo[arrayList.size()]);
     }
 
     public long getTrafficStatisticByteCount() {
@@ -849,42 +844,51 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
             setDataSource(uri.getPath());
             return;
         }
-        if ("content".equals(scheme) && "settings".equals(uri.getAuthority()) && (uri = RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.getDefaultType(uri))) == null) {
-            throw new FileNotFoundException("Failed to resolve default ringtone");
+        if ("content".equals(scheme) && "settings".equals(uri.getAuthority())) {
+            uri = RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.getDefaultType(uri));
+            if (uri == null) {
+                throw new IllegalStateException("Failed to resolve default ringtone");
+            }
         }
-        AssetFileDescriptor assetFileDescriptor = null;
+        AssetFileDescriptor openAssetFileDescriptor = null;
         try {
-            AssetFileDescriptor openAssetFileDescriptor = context.getContentResolver().openAssetFileDescriptor(uri, "r");
-            if (openAssetFileDescriptor == null) {
-                if (openAssetFileDescriptor != null) {
-                    openAssetFileDescriptor.close();
-                }
-            } else {
+            openAssetFileDescriptor = context.getContentResolver().openAssetFileDescriptor(uri, "r");
+            if (openAssetFileDescriptor != null) {
                 if (openAssetFileDescriptor.getDeclaredLength() < 0) {
                     setDataSource(openAssetFileDescriptor.getFileDescriptor());
                 } else {
                     setDataSource(openAssetFileDescriptor.getFileDescriptor(), openAssetFileDescriptor.getStartOffset(), openAssetFileDescriptor.getDeclaredLength());
                 }
-                openAssetFileDescriptor.close();
             }
         } catch (IOException unused) {
+            throw new IllegalStateException("Could not open asset file descriptor", unused);
         } catch (SecurityException unused2) {
-        } catch (Throwable th) {
-            if (0 != 0) {
-                assetFileDescriptor.close();
+        } finally {
+            if (openAssetFileDescriptor != null) {
+                try {
+                    openAssetFileDescriptor.close();
+                } catch (IOException unused3) {
+                }
             }
-            throw th;
         }
     }
 
     @Override // tv.danmaku.ijk.media.player.IMediaPlayer
     @TargetApi(13)
     public void setDataSource(FileDescriptor fileDescriptor) {
-        ParcelFileDescriptor dup = ParcelFileDescriptor.dup(fileDescriptor);
+        ParcelFileDescriptor dup = null;
         try {
+            dup = ParcelFileDescriptor.dup(fileDescriptor);
             _setDataSourceFd(dup.getFd());
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not dup file descriptor", e);
         } finally {
-            dup.close();
+            if (dup != null) {
+                try {
+                    dup.close();
+                } catch (IOException unused) {
+                }
+            }
         }
     }
 
