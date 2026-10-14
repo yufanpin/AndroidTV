@@ -2,6 +2,7 @@ package com.tivimatelite.web
 
 import android.content.Context
 import fi.iki.elonen.NanoHTTPD
+import java.util.Locale
 
 class LocalAdminServer(
     context: Context,
@@ -74,6 +75,17 @@ class LocalAdminServer(
                 PlaylistStore.deleteCustomSource(appContext, id)
                 redirect("/")
             }
+            "/audio/gain" -> {
+                val raw = session.parameters["gain"]?.firstOrNull()
+                val parsed = raw?.toFloatOrNull()
+                if (parsed != null) {
+                    // 只落盘：生效链路由 ReadyStallWatch 观察到变化后触发重播
+                    AudioGainPrefs.saveGain(appContext, parsed)
+                } else {
+                    AppLogStore.w("AdminServer", "audio/gain ignored: raw=$raw")
+                }
+                redirect("/")
+            }
             "/logs/clear" -> {
                 AppLogStore.clear()
                 AppLogStore.i("AdminServer", "日志已清空")
@@ -99,6 +111,7 @@ class LocalAdminServer(
         val selectedId = PlaylistStore.getSelectedSourceId(appContext)
         val sources = PlaylistStore.getCustomSources(appContext)
         val effective = PlaylistStore.loadEffectivePlaylist(appContext)
+        val gainText = String.format(Locale.US, "%.2f", AudioGainPrefs.loadGain(appContext))
 
         val rows = buildString {
             for (source in sources) {
@@ -178,6 +191,17 @@ class LocalAdminServer(
                       </tbody>
                     </table>
                   </div>
+                </details>
+
+                <details class="box" open>
+                  <summary>音频增益（当前 $gainText 倍）</summary>
+                  <form action="/audio/gain" method="post" style="margin-top:12px;">
+                    <p class="hint">1.00 = 原始音量（直通，不挂滤镜）。大于 1.00 才抬增益：volume 先整体抬电平，再由 alimiter 把峰值砖墙限幅在 0.95，因此不会削波失真。范围 1.00–3.00。</p>
+                    <input type="range" name="gain" min="1.0" max="3.0" step="0.1" value="$gainText" style="width:60%;vertical-align:middle;" oninput="document.getElementById('gainOut').textContent=Number(this.value).toFixed(2)" />
+                    <output id="gainOut" style="margin-left:8px;">$gainText</output>
+                    <button type="submit">保存增益</button>
+                    <p class="hint">IJK 选项在 prepare 时生效：播放中保存会自动重播当前频道立即听效；未在播放时于下次播放生效。</p>
+                  </form>
                 </details>
 
                 <details class="box">

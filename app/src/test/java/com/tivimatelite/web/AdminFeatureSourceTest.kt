@@ -32,6 +32,31 @@ class AdminFeatureSourceTest {
     }
 
     @Test
+    fun localAdminServer_exposesAdjustableAudioGain() {
+        val source = java.io.File(
+            "src/main/java/com/tivimatelite/web/LocalAdminServer.kt"
+        ).readText()
+
+        assertTrue(source.contains("/audio/gain"))
+        assertTrue(source.contains("音频增益"))
+        assertTrue(source.contains("type=\"range\""))
+        assertTrue(source.contains("name=\"gain\""))
+    }
+
+    @Test
+    fun audioGainPrefs_persistsClampedGainViaPlayerManager() {
+        val source = java.io.File(
+            "src/main/java/com/tivimatelite/web/AudioGainPrefs.kt"
+        ).readText()
+
+        assertTrue(source.contains("audio_prefs"))
+        assertTrue(source.contains("\"gain\""))
+        assertTrue(source.contains("fun loadGain"))
+        assertTrue(source.contains("fun saveGain"))
+        assertTrue(source.contains("PlayerManager.clampAudioGain"))
+    }
+
+    @Test
     fun manifest_containsBootReceiverPermissionAndRegistration() {
         val source = java.io.File(
             "src/main/AndroidManifest.xml"

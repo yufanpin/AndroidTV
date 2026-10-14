@@ -41,6 +41,20 @@ object PlayerManager {
     /** 默认音频增益倍数（1.0 = 原始音量；<=1.0 表示直通、不挂滤镜）。 */
     const val DEFAULT_AUDIO_GAIN = 1.6f
 
+    /**
+     * 后台可调增益范围（含端点）。下界 1.0：低于原始音量不走本增益链，
+     * 日常音量由电视/遥控控制；上界 3.0 约 +9.5dB，再高只会被 alimiter 压扁、
+     * 白白损失动态范围。Web 后台滑块范围与此保持一致。
+     */
+    const val AUDIO_GAIN_MIN = 1.0f
+    const val AUDIO_GAIN_MAX = 3.0f
+
+    /**
+     * 钳位到后台可调范围。纯函数：不写日志、不触碰 Android API，
+     * 便于被 [com.tivimatelite.web.AudioGainPrefs] 的读写两端同时复用。
+     */
+    fun clampAudioGain(value: Float): Float = value.coerceIn(AUDIO_GAIN_MIN, AUDIO_GAIN_MAX)
+
     enum class PlaybackState { IDLE, BUFFERING, READY, ENDED }
 
     /** 播放事件回调（替代 ExoPlayer 的 Player.Listener）。 */
@@ -83,9 +97,24 @@ object PlayerManager {
     /**
      * 音频增益倍数（线性，1.0 = 原始音量）。IJK 选项须在 prepare 之前设置，
      * 因此修改后于下一次 [play] 生效。
+     *
+     * 只读对外暴露：全部写入走 [setAudioGain]，保证越界钳位与日志不被绕过。
      */
     @Volatile
     var audioGain: Float = DEFAULT_AUDIO_GAIN
+        private set
+
+    /**
+     * 设置音频增益（越界先钳位再生效）。只更新后续 [play] 会读取的值——
+     * 已在播放的流要重新 prepare 才会套用新滤镜，Web 后台的改动由
+     * `ReadyStallWatch.startAudioGainWatcher` 观察到后触发重播完成生效。
+     */
+    fun setAudioGain(value: Float) {
+        val clamped = clampAudioGain(value)
+        if (audioGain == clamped) return
+        audioGain = clamped
+        AppLogStore.i(TAG, "audioGain -> $clamped")
+    }
 
     fun getPlayer(context: Context): IjkMediaPlayer? {
         player?.let { return it }

@@ -26,6 +26,8 @@ class ReadyStallWatchTest {
             getTotalRxBytes = { 0L },
             getPlaylistFingerprint = { "same" },
             onPlaylistChanged = {},
+            getAudioGain = { 1.6f },
+            onAudioGainChanged = {},
             onReadyStallDetected = {},
             onSpeedText = {},
             onHeartbeat = { logs += it },
@@ -57,6 +59,8 @@ class ReadyStallWatchTest {
             getTotalRxBytes = { 0L },
             getPlaylistFingerprint = { fingerprint },
             onPlaylistChanged = { playlistChanges += Unit },
+            getAudioGain = { 1.6f },
+            onAudioGainChanged = {},
             onReadyStallDetected = { stallSignals += it },
             onSpeedText = {},
             onHeartbeat = {},
@@ -102,6 +106,8 @@ class ReadyStallWatchTest {
             getTotalRxBytes = { 0L },
             getPlaylistFingerprint = { "same" },
             onPlaylistChanged = {},
+            getAudioGain = { 1.6f },
+            onAudioGainChanged = {},
             onReadyStallDetected = { stallSignals += it },
             onSpeedText = {},
             onHeartbeat = {},
@@ -134,6 +140,8 @@ class ReadyStallWatchTest {
             getTotalRxBytes = { 0L },
             getPlaylistFingerprint = { "same" },
             onPlaylistChanged = {},
+            getAudioGain = { 1.6f },
+            onAudioGainChanged = {},
             onReadyStallDetected = { stallSignals += it },
             onSpeedText = {},
             onHeartbeat = {},
@@ -148,6 +156,38 @@ class ReadyStallWatchTest {
         }
 
         assertTrue(stallSignals.isEmpty())
+        watch.cancel()
+    }
+
+    @Test
+    fun `audio gain watcher fires only after persisted gain changes`() = runTest {
+        var gain = 1.6f
+        val gainChanges = mutableListOf<Float>()
+
+        val watch = ReadyStallWatch(
+            scope = this,
+            getPlayerSnapshot = { PlayerSnapshot(false, false, 0L) },
+            getNowMs = { testScheduler.currentTime },
+            getTotalRxBytes = { 0L },
+            getPlaylistFingerprint = { "same" },
+            onPlaylistChanged = {},
+            getAudioGain = { gain },
+            onAudioGainChanged = { gainChanges += it },
+            onReadyStallDetected = {},
+            onSpeedText = {},
+            onHeartbeat = {},
+            logWarning = { _ -> }
+        )
+
+        watch.startAudioGainWatcher(initialGain = 1.6f)
+        advanceTimeBy(1199)
+        runCurrent()
+        assertTrue(gainChanges.isEmpty())
+
+        gain = 2.2f
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(listOf(2.2f), gainChanges)
         watch.cancel()
     }
 }

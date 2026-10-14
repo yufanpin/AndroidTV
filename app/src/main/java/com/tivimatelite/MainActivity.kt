@@ -18,6 +18,7 @@ import com.tivimatelite.player.PlayerManager
 import com.tivimatelite.player.PlaybackHistoryStore
 import com.tivimatelite.switcher.ChannelSwitcher
 import com.tivimatelite.web.AppLogStore
+import com.tivimatelite.web.AudioGainPrefs
 import com.tivimatelite.web.FileLogStore
 import com.tivimatelite.web.LocalAdminServerManager
 import com.tivimatelite.web.PlaylistStore
@@ -171,6 +172,19 @@ class MainActivity : AppCompatActivity() {
                 AppLogStore.i(TAG, "Playlist config changed, reloading channels")
                 reloadChannelsKeepingCurrent()
             },
+            getAudioGain = { AudioGainPrefs.loadGain(this) },
+            onAudioGainChanged = { newGain ->
+                PlayerManager.setAudioGain(newGain)
+                if (PlayerManager.currentUrl != null && PlayerManager.playWhenReady) {
+                    // IJK 的 af 选项只在 prepare 时读取，播放中必须重播才会套用新增益
+                    AppLogStore.i(TAG, "Audio gain -> $newGain, replaying current source")
+                    FileLogStore.i(TAG, "Audio gain -> $newGain, replaying current source")
+                    channelSwitcher.playCurrentSource(resetAttempts = true)
+                } else {
+                    AppLogStore.i(TAG, "Audio gain -> $newGain, will apply on next play")
+                    FileLogStore.i(TAG, "Audio gain -> $newGain, will apply on next play")
+                }
+            },
             onReadyStallDetected = { reason ->
                 lastReadyStallRecoveryAtMs = System.currentTimeMillis()
                 channelSwitcher.playNextSourceForCurrentChannel(reason)
@@ -191,11 +205,14 @@ class MainActivity : AppCompatActivity() {
         binding.playerSurface.holder.addCallback(surfaceCallback)
         attachPlayerSurface()
 
+        // 先于首次 prepare 应用持久化增益，保证开机首个频道就带正确滤镜
+        PlayerManager.setAudioGain(AudioGainPrefs.loadGain(this))
         lastPlaylistFingerprint = PlaylistStore.getConfigFingerprint(this)
         loadChannels()
         readyStallWatch.startPlaylistWatcher(lastPlaylistFingerprint.orEmpty())
         readyStallWatch.startNetworkSpeedMonitor()
         readyStallWatch.startHeartbeat()
+        readyStallWatch.startAudioGainWatcher(AudioGainPrefs.loadGain(this))
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {

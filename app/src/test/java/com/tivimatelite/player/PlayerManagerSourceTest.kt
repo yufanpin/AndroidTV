@@ -47,4 +47,14 @@ class PlayerManagerSourceTest {
         assertTrue(source.contains("volume=%s"))
         assertTrue(source.contains("alimiter=limit=0.95"))
     }
+
+    @Test
+    fun source_exposes_clamped_adjustable_audio_gain() {
+        // 后台可调：范围常量 + 钳位纯函数 + 唯一写入入口
+        assertTrue(source.contains("AUDIO_GAIN_MIN"))
+        assertTrue(source.contains("AUDIO_GAIN_MAX"))
+        assertTrue(source.contains("fun clampAudioGain"))
+        assertTrue(source.contains("fun setAudioGain"))
+        assertTrue(source.contains("coerceIn(AUDIO_GAIN_MIN, AUDIO_GAIN_MAX)"))
+    }
 }

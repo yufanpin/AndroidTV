@@ -21,6 +21,8 @@ class ReadyStallWatch(
     private val getTotalRxBytes: () -> Long,
     private val getPlaylistFingerprint: () -> String,
     private val onPlaylistChanged: () -> Unit,
+    private val getAudioGain: () -> Float,
+    private val onAudioGainChanged: (Float) -> Unit,
     private val onReadyStallDetected: (String) -> Unit,
     private val onSpeedText: (String) -> Unit,
     private val onHeartbeat: (String) -> Unit,
@@ -28,6 +30,7 @@ class ReadyStallWatch(
 ) {
     private var readyStallWatchJob: Job? = null
     private var playlistWatchJob: Job? = null
+    private var audioGainWatchJob: Job? = null
     private var netSpeedJob: Job? = null
     private var heartbeatJob: Job? = null
     private var readyStallIgnoreUntilMs = 0L
@@ -46,6 +49,24 @@ class ReadyStallWatch(
                 if (currentFingerprint == lastPlaylistFingerprint) continue
                 lastPlaylistFingerprint = currentFingerprint
                 onPlaylistChanged()
+            }
+        }
+    }
+
+    /**
+     * 轮询 Web 后台落盘的音频增益；值一变就回调，由调用方应用并重播当前频道
+     * （IJK 的 `af` 选项只在 prepare 时读取，不重播不生效）。
+     */
+    fun startAudioGainWatcher(initialGain: Float) {
+        audioGainWatchJob?.cancel()
+        var lastGain = initialGain
+        audioGainWatchJob = scope.launch {
+            while (true) {
+                delay(PLAYLIST_WATCH_INTERVAL_MS)
+                val currentGain = getAudioGain()
+                if (currentGain == lastGain) continue
+                lastGain = currentGain
+                onAudioGainChanged(currentGain)
             }
         }
     }
@@ -154,6 +175,7 @@ class ReadyStallWatch(
 
     fun cancel() {
         playlistWatchJob?.cancel()
+        audioGainWatchJob?.cancel()
         netSpeedJob?.cancel()
         heartbeatJob?.cancel()
         cancelReadyStallWatch()
