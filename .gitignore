@@ -7,3 +7,9 @@ local.properties
 # Test artifacts
 TiviMateLite-debug-apk/
 artifact_download/
+
+# Local Gradle cache (must never be committed)
+.gradle/
+
+# Local agent/opencode working artifacts
+.omo/
