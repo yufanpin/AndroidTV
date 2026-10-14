@@ -20,7 +20,8 @@ Android TV IPTV 播放器，面向晶晨 S905L3（2GB RAM、Android 9）等低�
 | 缓冲超时 | BUFFERING 且播放中持续 35s → 切下一源 |
 | Ready-stall 监控 | READY 但位置与缓冲均停滞 300s → 切源（60s 预热 + 300s 恢复冷却） |
 | 上次播放记忆 | 重启后恢复上次频道及其线路 |
-| Web 后台 | NanoHTTPD（端口 5220）：切换内置/自定义源、增删源、粘贴源、开机自启开关、实时日志 |
+| 音频增益（Web 可调） | Web 后台滑块调增益（1.00–3.00 倍，默认 1.60）：avfilter `volume + alimiter` 抬响度且不削波；保存即重播当前频道生效并持久化到 `audio_prefs` |
+| Web 后台 | NanoHTTPD（端口 5220）：切换内置/自定义源、增删源、粘贴源、音频增益、开机自启开关、实时日志 |
 | 文件日志持久化 | 写入 `cacheDir/tivimate_diag.txt`（512KB 上限），含未捕获异常处理器，ADB 断开后仍可拉取 |
 | 内存日志 | `AppLogStore` 环形缓冲 500 行，供 Web 后台实时查看 |
 | 网速悬浮层 | 每秒刷新实时下行速率 |
@@ -135,9 +136,13 @@ PlaybackHistoryStore   （SharedPreferences `playback_history`）
 PlaylistStore          （SharedPreferences `playlist_admin`）
   └─ 内置/自定义源模式、自定义源增删选、粘贴源内容、配置指纹
 
+AudioGainPrefs         （SharedPreferences `audio_prefs`）
+  └─ 音频增益读写；范围与钳位复用 PlayerManager.clampAudioGain（单一真源）
+
 ReadyStallWatch
   ├─ ready-stall 检测（READY 停滞 → 切源）
   ├─ 播放列表变更监听（配置指纹变化 → 热重载）
+  ├─ 音频增益监听（轮询 audio_prefs，变化 → 通知重播当前频道）
   ├─ 网速监控（每秒）
   └─ 心跳（每 10s）
 
@@ -169,6 +174,7 @@ FileLogStore（cacheDir/tivimate_diag.txt）/ AppLogStore（内存 500 行环形
 | `web/LocalAdminServer.kt` | NanoHTTPD Web 后台（端口 5220） |
 | `web/LocalAdminServerManager.kt` | 后台生命周期与候选 URL |
 | `web/PlaylistStore.kt` | 直播源管理模式（内置 / 自定义 / 粘贴） |
+| `web/AudioGainPrefs.kt` | 音频增益持久化（SharedPreferences `audio_prefs`），供 Web 后台调节 |
 | `web/BootPrefs.kt` | 开机自启开关 |
 | `web/FileLogStore.kt` | 文件日志（`cacheDir/tivimate_diag.txt`）+ 未捕获异常处理器 |
 | `web/AppLogStore.kt` | 内存环形缓冲日志（500 行），供 Web 后台查看 |
@@ -182,6 +188,9 @@ FileLogStore（cacheDir/tivimate_diag.txt）/ AppLogStore（内存 500 行环形
   `overlay-format=RV32`，`packet-buffering=0`（低延迟）
 - **FORMAT**：`user_agent=SYTV/1.6`，`probesize` / `analyzeduration`，
   `reconnect=1`（自动重连）
+- **PLAYER（音频增益）**：`af=volume=<gain>,alimiter=limit=0.95:attack=5:release=50:level=0`
+  ——增益 >1.0 时挂载：`volume` 先整体抬电平，`alimiter` 再把峰值砖墙限幅在 0.95 防削波；
+  `gain<=1.0` 直通不挂滤镜（默认 1.60，范围 1.00–3.00，见 `buildAudioFilterChain()`）
 - **CODEC**：`skip_loop_filter=48`（解码加速）
 
 > 未在本 AAR 的 `libijkplayer.so` 中注册的选项会被 `av_opt_set_dict` 静默忽略，故代码中已剔除无效项。
@@ -193,6 +202,7 @@ FileLogStore（cacheDir/tivimate_diag.txt）/ AppLogStore（内存 500 行环形
 - **纯黑背景**：`#000000`，无动画过渡
 - **Glide**：强制 `override(64,64)` + `RGB_565`，列表静止时才加载台标
 - **硬解/原生库异常**：只记录日志不崩溃；原生库加载失败永久置位，避免重试风暴
+- **非削波音频增益**：增益走 avfilter `volume + alimiter` 链（而非直接放大 PCM），峰值被砖墙限幅在 0.95，避免爆音
 - **Ready-stall 兜底**：应对 HLS timeline 不连续导致 `currentPosition` 卡死
 
 ---
@@ -204,22 +214,30 @@ FileLogStore（cacheDir/tivimate_diag.txt）/ AppLogStore（内存 500 行环形
 ```bash
 adb shell dumpsys meminfo com.tivimatelite
 adb shell top -o PID,CPU,RES,ARGS | grep tivimatelite
-adb logcat -s PlayerManager MainActivity ChannelSwitcher ReadyStallWatch
+adb logcat -s TiviMateLite
 ```
 
 ### 功能验证
 
 ```bash
+# 应用日志统一走 tag `TiviMateLite`，消息内再带类名前缀；先按 tag 过滤再 findstr 关键字
 # 切源（左右键）
-adb logcat -s MainActivity | findstr "Manual source switch"
+adb logcat -s TiviMateLite | findstr "Manual source switch"
 
 # 加载超时
-adb logcat -s MainActivity | findstr "Load timeout"
-# → "Load timeout (15000ms), trying next source"
+adb logcat -s TiviMateLite | findstr "Load timeout"
+# → "MainActivity: Load timeout (15000ms), trying next source"
 
 # 线路记忆
-adb logcat -s MainActivity | findstr "playable hosts"
-# → "Removed failed host from playable hosts: http://..."
+adb logcat -s TiviMateLite | findstr "playable hosts"
+# → "MainActivity: Removed failed host from playable hosts: http://..."
+
+# 音频增益（Web 后台保存后，链路顺序如下）
+adb logcat -s TiviMateLite | findstr "audioGain"
+# → "AudioGainPrefs: Audio gain set to 2.2"
+#   "PlayerManager: audioGain -> 2.2"
+#   "MainActivity: Audio gain -> 2.2, replaying current source"
+#   "PlayerManager: play url=... audioGain=2.2"
 
 # 设备端日志文件（ADB 断开后仍可用）
 adb shell cat /data/data/com.tivimatelite/cache/tivimate_diag.txt
@@ -234,6 +252,13 @@ adb shell cat /data/data/com.tivimatelite/cache/tivimate_diag.txt
 adb forward tcp:5220 tcp:5220
 # 然后访问 http://127.0.0.1:5220/
 ```
+
+后台首页提供**音频增益**滑块（`POST /audio/gain`，字段 `gain`，范围 1.00–3.00）：
+
+- 保存后落盘 `audio_prefs`；`ReadyStallWatch` 约每 1.2s 轮询，检测到变化即重播当前频道使新增益生效
+  （IJK 的 `af` 选项只在 prepare 时读取，播放中不重播不生效）；未播放时于下次播放生效。
+- 越界值自动钳位（`>3.00→3.00`、`<1.00→1.00`）；非法/空输入被忽略并记一条 `audio/gain ignored` 警告。
+- 开机先应用持久化增益再首次 prepare，确保开机首个频道即带正确滤镜。
 
 ### 长测与恢复
 
@@ -275,6 +300,7 @@ adb uninstall com.tivimatelite
 - **HLS timeline 不连续**（部分 `fmt=ts2hls` 实时转码源）：`currentPosition` 卡住时，由 300s ready-stall 兜底切源
 - **单源频道**：所有源失败后按 5-15s 递增间隔重试，最多 3 次，之后放弃直到用户切台
 - **ADB over TCP 约 3 分钟无活动断开**：长测需后台 keepalive
+- **音频增益需重播生效**：IJK 的 `af` 仅在 prepare 时读取，播放中改增益会触发一次重播（伴随短暂 BUFFERING）
 
 ---
 
