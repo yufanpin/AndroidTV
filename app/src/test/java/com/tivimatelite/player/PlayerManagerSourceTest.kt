@@ -10,9 +10,9 @@ class PlayerManagerSourceTest {
     }
 
     @Test
-    fun source_uses_fsplayer_instead_of_media3() {
-        assertTrue(source.contains("FSPlayer"))
-        assertTrue(source.contains("com.debugly.fsplayer.player"))
+    fun source_uses_ijkplayer_instead_of_media3() {
+        assertTrue(source.contains("IjkMediaPlayer"))
+        assertTrue(source.contains("tv.danmaku.ijk.media.player"))
     }
 
     @Test

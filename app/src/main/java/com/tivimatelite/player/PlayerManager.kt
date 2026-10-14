@@ -3,23 +3,26 @@ package com.tivimatelite.player
 import android.content.Context
 import android.view.Surface
 import com.tivimatelite.web.AppLogStore
-import com.debugly.fsplayer.player.FSPlayer
-import com.debugly.fsplayer.player.IMediaPlayer
+import tv.danmaku.ijk.media.player.IMediaPlayer
+import tv.danmaku.ijk.media.player.IjkMediaPlayer
 
 /**
- * FSPlayer 内核封装（ijkplayer 的活跃维护后继，替代原 ExoPlayer/Media3 与内联 IJK）。
+ * IJKPlayer 内核封装（debugly/ijkplayer k0.8.9 预编译 AAR，替代原 ExoPlayer/Media3、
+ * 以及在无 Vulkan 设备上无法构造的 FSPlayer）。
  *
- * 播放参数逐一照抄 DIYP `IjkVideoView.a(I)` 的 setOption 调用
- * （category: 1=FORMAT, 2=CODEC, 3=SWS, 4=PLAYER）。
+ * 选项名均已与本项目所用 `app/libs/ijkplayer-cmake-release.aar` 内 `jni/<abi>/libijkplayer.so`
+ * 中的字符串逐一核对；category 编号：1=FORMAT, 2=CODEC, 3=SWS, 4=PLAYER。
+ *
+ * 与 FSPlayer 不同，此 IJK 构建的安卓渲染后端为 OpenGL ES（无 `libvulkan.so` 依赖），
+ * 因此在无 Vulkan 驱动的设备（含 S905L3 机顶盒、MuMu 模拟器）上可正常出画。
  */
 object PlayerManager {
     private const val TAG = "PlayerManager"
 
-    // ---- 照抄 DIYP 的 setOption 参数（见 IjkVideoView.smali L676-791）----
+    // ---- 播放选项（DIYP 对内 JS 移植而来的 IPTV 播放参数）----
     private const val USER_AGENT = "SYTV/1.6"
     private const val OPT_PROBESIZE = "1024000"
     private const val OPT_ANALYZEDURATION = "2000000"
-    private const val OPT_CACHE_BUFFER_DURATION_MS = 20_000L   // 0x4e20
     private const val OPT_SKIP_LOOP_FILTER = 48L               // 0x30, CODEC 类别
     private const val OPT_FRAMEDROP = 5L
     private const val OPT_OVERLAY_FORMAT_RV32 = 842225234L     // SDL_FCC_RV32
@@ -35,11 +38,12 @@ object PlayerManager {
     }
 
     @Volatile
-    private var player: FSPlayer? = null
+    private var player: IjkMediaPlayer? = null
 
     /**
-     * FSPlayer 构造在无可用 Vulkan 渲染器时会永久失败（见 getPlayer 注释）。
-     * 一旦失败即置位，避免 channelSwitcher 每换一次源就重建播放器导致重试风暴。
+     * 若原生库加载失败（例如 APK 未打包对应 ABI 的 `libijkplayer.so`），构造会抛
+     * `UnsatisfiedLinkError`。一旦失败即置位，避免 channelSwitcher 每换一次源就重建
+     * 播放器导致重试风暴——ABI 缺失不会在运行期自愈。
      */
     @Volatile
     private var playerCreationFailed = false
@@ -62,21 +66,31 @@ object PlayerManager {
     var currentUrl: String? = null
         private set
 
-    fun getPlayer(context: Context): FSPlayer? {
+    fun getPlayer(context: Context): IjkMediaPlayer? {
         player?.let { return it }
-        return synchronized(this) {
-            player?.let { return it }
-            runCatching { createPlayer() }
-                .onFailure {
-                    // FSPlayer 的 native_setup 在无可用 Vulkan 渲染器时直接失败，
-                    // 并以误导性的 OutOfMemoryError 抛出（见其实现在 ijkmp_create 返回 NULL 时）。
-                    // 此处兜住 Error，避免整个 App 因播放器构造失败而崩溃。
-                    AppLogStore.e(TAG, "FSPlayer 创建失败（设备可能无可用 Vulkan 渲染器）", it)
-                    events?.onError(IMediaPlayer.MEDIA_ERROR_UNKNOWN, 0)
+        if (playerCreationFailed) return null
+
+        var created: IjkMediaPlayer? = null
+        var failure: Throwable? = null
+        synchronized(this) {
+            created = player
+            if (created == null && !playerCreationFailed) {
+                try {
+                    created = createPlayer().also { player = it }
+                } catch (t: Throwable) {
+                    // 构造失败通常源于原生库加载失败（UnsatisfiedLinkError）。
+                    // 兜住 Error 防止整个 App 崩溃，并置位永久失败标志。
+                    playerCreationFailed = true
+                    failure = t
                 }
-                .getOrNull()
-                ?.also { player = it }
+            }
         }
+
+        failure?.let {
+            AppLogStore.e(TAG, "IjkMediaPlayer 创建失败：原生库加载异常（检查 ABI 是否匹配）", it)
+            events?.onError(IMediaPlayer.MEDIA_ERROR_UNKNOWN, 0)
+        }
+        return created
     }
 
     fun setEvents(value: Events?) {
@@ -85,7 +99,7 @@ object PlayerManager {
 
     fun play(context: Context, url: String, forceHls: Boolean = false) {
         val p = getPlayer(context) ?: run {
-            AppLogStore.e(TAG, "play() aborted: FSPlayer 不可用，url=$url")
+            AppLogStore.e(TAG, "play() aborted: IjkMediaPlayer 不可用，url=$url")
             return
         }
         currentUrl = url
@@ -113,6 +127,8 @@ object PlayerManager {
         synchronized(this) {
             player?.release()
             player = null
+            // 释放后允许下次 getPlayer 重新尝试构造（例如 Activity 重建 / App 重启）。
+            playerCreationFailed = false
         }
         currentUrl = null
         playWhenReady = false
@@ -137,9 +153,10 @@ object PlayerManager {
         events?.onStateChanged(next)
     }
 
-    private fun createPlayer(): FSPlayer {
-        val p = FSPlayer()
-        runCatching { FSPlayer.native_setLogLevel(FSPlayer.IJK_LOG_WARN) }
+    private fun createPlayer(): IjkMediaPlayer {
+        AppLogStore.i(TAG, "createPlayer: IjkMediaPlayer")
+        val p = IjkMediaPlayer()
+        runCatching { IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_WARN) }
 
         p.setOnPreparedListener { mp ->
             AppLogStore.i(TAG, "onPrepared")
@@ -170,31 +187,31 @@ object PlayerManager {
         return p
     }
 
-    /** 深浅拷贝自 DIYP：硬解 + 直播低延迟 + 自动重连。 */
-    private fun applyOptions(p: FSPlayer) {
+    /**
+     * IJK 的 IPTV 播放选项：硬解 + 直播低延迟 + 自动重连。
+     * 已剔除本 AAR 的 `libijkplayer.so` 未注册的选项（如 `rtsp_flags`/`prefer_tcp`：
+     * 注册名缺失时 `av_opt_set_dict` 会静默忽略，属于无效设置）。
+     */
+    private fun applyOptions(p: IjkMediaPlayer) {
         // PLAYER(4)
-        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
-        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "mediacodec_all_videos", 1L)
-        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "mediacodec-avc", 1L)
-        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "mediacodec-hevc", 1L)
-        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg2", 1L)
-        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg4", 1L)
-        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
-        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "framedrop", OPT_FRAMEDROP)
-        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "overlay-format", OPT_OVERLAY_FORMAT_RV32)
-        p.setOption(FSPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-all-videos", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-avc", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-hevc", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg2", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg4", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", OPT_FRAMEDROP)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "overlay-format", OPT_OVERLAY_FORMAT_RV32)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
 
         // FORMAT(1)
-        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "user_agent", USER_AGENT)
-        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "probesize", OPT_PROBESIZE)
-        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", OPT_ANALYZEDURATION)
-        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", 0L)
-        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "delay-optimization", 1L)
-        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "cache-buffer-duration", OPT_CACHE_BUFFER_DURATION_MS)
-        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1L)
-        p.setOption(FSPlayer.OPT_CATEGORY_FORMAT, "rtsp_flags", "prefer_tcp")
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "user_agent", USER_AGENT)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", OPT_PROBESIZE)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", OPT_ANALYZEDURATION)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1L)
 
         // CODEC(2)
-        p.setOption(FSPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", OPT_SKIP_LOOP_FILTER)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", OPT_SKIP_LOOP_FILTER)
     }
 }
