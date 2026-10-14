@@ -39,4 +39,12 @@ class PlayerManagerSourceTest {
     fun source_sets_diy_user_agent() {
         assertTrue(source.contains("\"SYTV/1.6\""))
     }
+
+    @Test
+    fun source_enables_avfilter_audio_gain() {
+        // 音频增益：avfilter 链 volume(提增益) + alimiter(砖墙限幅，防削波)
+        assertTrue(source.contains("OPT_CATEGORY_PLAYER, \"af\""))
+        assertTrue(source.contains("volume=%s"))
+        assertTrue(source.contains("alimiter=limit=0.95"))
+    }
 }

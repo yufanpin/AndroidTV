@@ -3,6 +3,7 @@ package com.tivimatelite.player
 import android.content.Context
 import android.view.Surface
 import com.tivimatelite.web.AppLogStore
+import java.util.Locale
 import tv.danmaku.ijk.media.player.IMediaPlayer
 import tv.danmaku.ijk.media.player.IjkMediaPlayer
 
@@ -26,6 +27,19 @@ object PlayerManager {
     private const val OPT_SKIP_LOOP_FILTER = 48L               // 0x30, CODEC 类别
     private const val OPT_FRAMEDROP = 5L
     private const val OPT_OVERLAY_FORMAT_RV32 = 842225234L     // SDL_FCC_RV32
+
+    // ---- 音频增益（avfilter）----
+    // 前提：本项目所用 AAR 已启用 avfilter（`af` 选项已注册，volume/alimiter 等滤镜可用；
+    // 旧 AAR 因 ffmpeg 配置带 `--disable-filters` 而没有这些滤镜）。
+    // 不失真增益思路：volume 先把整体电平抬起来，再用 alimiter 做“砖墙”限幅，
+    // 峰值被钳在 0.95(-0.45dBFS) 以内 —— 因此不会发生硬削波（削顶失真）；
+    // level=0 关闭 alimiter 的自动回补，避免自适应增益来回抖动（音量忽大忽小）。
+    // 备选（拉平响度而非单纯提增益）：dynaudnorm=f=250:g=15:p=0.9 —— 自适应、同样无削波风险，
+    // 但对音乐类节目会有轻微“抽气”感，故不作默认。
+    private const val AUDIO_GAIN_FILTER = "volume=%s,alimiter=limit=0.95:attack=5:release=50:level=0"
+
+    /** 默认音频增益倍数（1.0 = 原始音量；<=1.0 表示直通、不挂滤镜）。 */
+    const val DEFAULT_AUDIO_GAIN = 1.6f
 
     enum class PlaybackState { IDLE, BUFFERING, READY, ENDED }
 
@@ -66,6 +80,13 @@ object PlayerManager {
     var currentUrl: String? = null
         private set
 
+    /**
+     * 音频增益倍数（线性，1.0 = 原始音量）。IJK 选项须在 prepare 之前设置，
+     * 因此修改后于下一次 [play] 生效。
+     */
+    @Volatile
+    var audioGain: Float = DEFAULT_AUDIO_GAIN
+
     fun getPlayer(context: Context): IjkMediaPlayer? {
         player?.let { return it }
         if (playerCreationFailed) return null
@@ -104,7 +125,7 @@ object PlayerManager {
         }
         currentUrl = url
         playWhenReady = true
-        AppLogStore.i(TAG, "play url=$url forceHls=$forceHls")
+        AppLogStore.i(TAG, "play url=$url forceHls=$forceHls audioGain=$audioGain")
         setState(PlaybackState.BUFFERING)
         runCatching {
             p.reset()
@@ -188,7 +209,7 @@ object PlayerManager {
     }
 
     /**
-     * IJK 的 IPTV 播放选项：硬解 + 直播低延迟 + 自动重连。
+     * IJK 的 IPTV 播放选项：硬解 + 直播低延迟 + 自动重连 + avfilter 音频增益。
      * 已剔除本 AAR 的 `libijkplayer.so` 未注册的选项（如 `rtsp_flags`/`prefer_tcp`：
      * 注册名缺失时 `av_opt_set_dict` 会静默忽略，属于无效设置）。
      */
@@ -204,6 +225,10 @@ object PlayerManager {
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", OPT_FRAMEDROP)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "overlay-format", OPT_OVERLAY_FORMAT_RV32)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
+        // 音频增益：avfilter 链（`af` 同属 PLAYER(4) 类别，仅在 CONFIG_AVFILTER 下注册）
+        buildAudioFilterChain()?.let {
+            p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "af", it)
+        }
 
         // FORMAT(1)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "user_agent", USER_AGENT)
@@ -213,5 +238,17 @@ object PlayerManager {
 
         // CODEC(2)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", OPT_SKIP_LOOP_FILTER)
+    }
+
+    /**
+     * 组装 avfilter 音频增益链：`volume=<gain>,alimiter=...`。
+     *
+     * 返回 null 表示直通：gain<=1.0 时不挂滤镜，避免对本身已足够响的源做无谓限幅。
+     * 语法按 ffmpeg 4.0（本项目 AAR 所用版本）校验，滤镜名与选项均已在 .so 中确认存在。
+     */
+    private fun buildAudioFilterChain(): String? {
+        if (audioGain <= 1.0f) return null
+        val gain = String.format(Locale.US, "%.2f", audioGain)
+        return String.format(Locale.US, AUDIO_GAIN_FILTER, gain)
     }
 }
