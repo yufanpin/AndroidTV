@@ -33,6 +33,8 @@ class ChannelSwitcher(
     private var singleSourceRetryCount = 0
     private var lastSingleSourceRetryAtMs = 0L
     private var switchDebounceJob: Job? = null
+    private var sourceSwitchDebounceJob: Job? = null
+    private var pendingSourceDelta = 0
     private var singleSourceRetryJob: Job? = null
     private var bufferingFailoverJob: Job? = null
     // P2: 15s 加载超时计时器
@@ -53,6 +55,54 @@ class ChannelSwitcher(
             pendingSwitchIndex = null
             switchChannelImmediately(target)
         }
+    }
+
+    /** 左右方向键手动切换当前频道的线路（源）；连续快按累积后防抖应用一次 */
+    fun requestSourceSwitchByDelta(delta: Int) {
+        val channelGroups = getChannelGroups()
+        val channelIndex = getCurrentChannelIndex()
+        if (channelIndex !in channelGroups.indices) return
+        val size = channelGroups[channelIndex].sources.size
+        if (size < 2) return
+
+        pendingSourceDelta += delta
+        val current = getCurrentSourceIndex().coerceIn(0, size - 1)
+        val preview = (((current + pendingSourceDelta) % size) + size) % size
+        showChannelNumberOverlay("线路 ${preview + 1}/$size")
+
+        sourceSwitchDebounceJob?.cancel()
+        sourceSwitchDebounceJob = scope.launch {
+            delay(SOURCE_SWITCH_DEBOUNCE_MS)
+            val applied = pendingSourceDelta
+            pendingSourceDelta = 0
+            switchSourceByDelta(applied)
+        }
+    }
+
+    /** 立即切到当前频道相邻线路（delta=+1/-1，循环） */
+    private fun switchSourceByDelta(delta: Int) {
+        if (delta == 0) return
+        val channelGroups = getChannelGroups()
+        val channelIndex = getCurrentChannelIndex()
+        if (channelIndex !in channelGroups.indices) return
+        val group = channelGroups[channelIndex]
+        val size = group.sources.size
+        if (size < 2) return
+
+        val current = getCurrentSourceIndex().coerceIn(0, size - 1)
+        val target = (((current + delta) % size) + size) % size
+        setCurrentSourceIndex(target)
+
+        // 手动切源视为一次全新尝试：清空自动故障转移的尝试记录；
+        // resetAttempts=false 确保不会用“优先源”覆盖用户手动选择的线路
+        attemptedSourceIndexes.clear()
+        hlsRetriedSourceIndexes.clear()
+        singleSourceRetryCount = 0
+        lastSingleSourceRetryAtMs = 0L
+        singleSourceRetryJob?.cancel()
+
+        playCurrentSource(resetAttempts = false)
+        logInfo("Manual source switch for ${group.name} to ${target + 1}/$size")
     }
 
     fun switchChannelImmediately(targetIndex: Int) {
@@ -220,6 +270,7 @@ class ChannelSwitcher(
 
     fun cancel() {
         switchDebounceJob?.cancel()
+        sourceSwitchDebounceJob?.cancel()
         singleSourceRetryJob?.cancel()
         cancelBufferingFailover()
         cancelLoadTimeout()
@@ -261,6 +312,7 @@ class ChannelSwitcher(
 
     companion object {
         private const val CHANNEL_ZAP_DEBOUNCE_MS = 300L
+        private const val SOURCE_SWITCH_DEBOUNCE_MS = 300L
         private const val BUFFERING_FAILOVER_MS = 35000L
         private const val SINGLE_SOURCE_RETRY_BASE_MS = 5000L
         private const val SINGLE_SOURCE_RETRY_MAX_MS = 15000L

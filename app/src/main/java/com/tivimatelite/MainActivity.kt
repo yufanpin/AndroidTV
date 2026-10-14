@@ -1,6 +1,5 @@
 package com.tivimatelite
 
-import android.media.AudioManager
 import android.net.TrafficStats
 import android.os.Bundle
 import android.view.KeyEvent
@@ -31,7 +30,6 @@ import kotlinx.coroutines.launch
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val scope = MainScope()
-    private lateinit var audioManager: AudioManager
 
     private var channelGroups: List<ChannelGroup> = emptyList()
     private var currentChannelIndex = -1
@@ -121,7 +119,6 @@ class MainActivity : AppCompatActivity() {
         LocalAdminServerManager.start(this)
         AppLogStore.i(TAG, "Admin ready at ${LocalAdminServerManager.getAdminUrl()}")
 
-        audioManager = getSystemService(AudioManager::class.java)
         channelLoader = ChannelLoader(this)
         channelSwitcher = ChannelSwitcher(
             scope = scope,
@@ -214,11 +211,11 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
-                adjustVolume(AudioManager.ADJUST_LOWER)
+                channelSwitcher.requestSourceSwitchByDelta(-1)
                 true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                adjustVolume(AudioManager.ADJUST_RAISE)
+                channelSwitcher.requestSourceSwitchByDelta(1)
                 true
             }
             KeyEvent.KEYCODE_DPAD_CENTER,
@@ -357,14 +354,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun cancelReadyStallWatch() {
         readyStallWatch.cancelReadyStallWatch()
-    }
-
-    private fun adjustVolume(direction: Int) {
-        audioManager.adjustStreamVolume(
-            AudioManager.STREAM_MUSIC,
-            direction,
-            AudioManager.FLAG_SHOW_UI
-        )
     }
 
     private fun attachPlayerSurface() {
