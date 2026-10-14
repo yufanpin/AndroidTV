@@ -4,6 +4,7 @@
 像素级致敬 TiviMate 架构，RAM 目标 ≤60MB，秒切台，不掉帧。
 
 **播放内核：IJKPlayer**（debugly/ijkplayer k0.8.9 预编译 AAR，OpenGL ES 渲染，不依赖 Vulkan）。
+AAR 以二进制形式提交在 `app/libs/ijkplayer-cmake-release.aar`（约 10MB，非 Maven 依赖）。
 历史：内核曾经历 Media3/ExoPlayer → IJKPlayer → FSPlayer → 回退 IJKPlayer（FSPlayer 硬依赖
 Vulkan，在无 Vulkan 设备上不可用，详见仓库根目录 `FSPlayer迁移实验报告.md`）。
 
@@ -12,23 +13,42 @@ Vulkan，在无 Vulkan 设备上不可用，详见仓库根目录 `FSPlayer迁�
 ## 构建与运行
 
 ```bash
-# 构建（GitHub Actions 统一用 JDK 17 + Gradle 8.10.2）
-gradle assembleDebug --no-daemon --stacktrace --info
+# 本地用 wrapper（Windows: gradlew.bat）。CI 里 `gradle` 由 setup-gradle 提供 8.10.2。
+.\gradlew.bat assembleDebug --no-daemon --stacktrace
 
-# 单元测试
-gradle testDebugUnitTest --no-daemon --stacktrace
+# 单元测试（纯 JVM，无需设备/模拟器）
+.\gradlew.bat testDebugUnitTest --no-daemon --stacktrace
+
+# 只跑单个测试类 / 方法
+.\gradlew.bat testDebugUnitTest --tests "*ChannelSwitcherTest*"
 
 # 产物
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-CI 位于 `.github/workflows/android.yml`，推送 main/master 或手动触发，构建 debug APK 并跑单元测试。
+**本地构建前置条件**（否则报 `SDK location not found`）：
+- JDK 17
+- Android SDK，通过环境变量 `ANDROID_HOME`，或在根目录创建 `local.properties` 写 `sdk.dir=...`
+  （`local.properties` 已被 gitignore，不要提交）
+- 本机常无 `gradle` 命令，务必用 `gradlew.bat` / `./gradlew`
+
+CI 位于 `.github/workflows/android.yml`，推送 main/master、开 PR 或手动触发，构建 debug APK 并跑单元测试
+（CI 命令带 `--info`）。
 
 **构建约束**：
-- AGP 8.7.3 + Kotlin 2.0.21 + Gradle 8.10.2
+- AGP 8.7.3 + Kotlin 2.0.21 + Gradle 8.10.2（wrapper 与 CI 一致，勿随意升级）
 - compileSdk = 35, targetSdk = 28（Android 9）, minSdk = 24
 - abiFilters = armeabi-v7a + arm64-v8a
 - ViewBinding + BuildConfig 均已开启，JVM target 17
+- `gradle.properties` 开启 `android.enableJetifier=true`（Glide 等旧库需要）
+
+### 测试约定（重要）
+
+- 测试全部是纯 JVM 单元测试（JUnit4 + `kotlinx-coroutines-test` 虚拟时间），不依赖设备、模拟器、Robolectric。
+- **部分测试是"源码断言"测试**：用 `java.io.File("src/main/java/...")` 读取源码/布局/manifest 文本，断言其中包含某些字符串（如 `PlayerManagerSourceTest`、`AdminFeatureSourceTest`、`SplashSourceTest`、`ChannelAdapterTest`、`LocalAdminServerManagerTest`）。因此：
+  - 改这些文件的相关代码时，**必须同步更新对应测试里的字面量**，否则重构/改名会莫名挂测试。
+  - 这些相对路径以 `app/` 模块目录为工作目录解析；不要在别处运行 JUnit 测试。
+- 真正的逻辑测试用注入式构造（如 `ChannelSwitcher(scope, getChannelGroups, ...)`）和虚拟时间 `advanceTimeBy`，测试中不要引入真实 `delay`。
 
 ---
 
