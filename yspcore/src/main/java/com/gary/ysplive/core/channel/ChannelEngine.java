@@ -60,8 +60,8 @@ public final class ChannelEngine {
     public static final double BK_ROTATE_MIN_INTERVAL_SEC = 20.0;
     /** bk 候选探活时检查多少个分片（分片可用性按片变化，只探首片会误杀）。 */
     private static final int PROBE_SEG_COUNT = 3;
-    /** JCE 触发“操作过于频繁”后的全局冷却时间。 */
-    private static final long JCE_RATE_LIMIT_COOLDOWN_MS = 20_000L;
+    /** JCE 触发“操作过于频繁”后的全局冷却时间（2 分钟，给上游风控窗口留出恢复时间）。 */
+    private static final long JCE_RATE_LIMIT_COOLDOWN_MS = 120_000L;
 
     /** 一次 m3u8 响应的完整信息（供 HTTP 层直接写 socket）。 */
     public static final class PlaylistResult {
