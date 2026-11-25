@@ -19,3 +19,8 @@ android {
 dependencies {
     testImplementation("junit:junit:4.13.2")
 }
+
+// 单元测试向量原先位于上游 tools/ 目录；这里随模块资源一起分发。
+tasks.withType<Test>().configureEach {
+    systemProperty("ysp.tools.dir", file("src/test/resources").absolutePath)
+}

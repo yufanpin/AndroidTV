@@ -1,0 +1,46 @@
+{
+ "cksumCases": [
+  {
+   "cksum": 0,
+   "data": ""
+  },
+  {
+   "cksum": 97,
+   "data": "61"
+  },
+  {
+   "cksum": 792145550,
+   "data": "68656c6c6f"
+  },
+  {
+   "cksum": 1578200864,
+   "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f"
+  },
+  {
+   "cksum": 446863552,
+   "data": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  }
+ ],
+ "encryptBlockCases": [
+  {
+   "block": "0001020304050607",
+   "cipher": "6328a50896bde3c8",
+   "key": "000102030405060708090a0b0c0d0e0f"
+  },
+  {
+   "block": "0011223344556677",
+   "cipher": "c9592212c5618b66",
+   "key": "110DBEC10C23E7D2E56A1CAD6914EF1B"
+  },
+  {
+   "block": "ffffffffffffffff",
+   "cipher": "1598946df37ccebf",
+   "key": "00000000000000000000000000000000"
+  },
+  {
+   "block": "deadbeefcafebabe",
+   "cipher": "3b13c42943b8666b",
+   "key": "0123456789abcdef0123456789abcdef"
+  }
+ ]
+}

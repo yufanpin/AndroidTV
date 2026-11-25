@@ -1,0 +1,282 @@
+{
+ "cases": [
+  {
+   "compactJsonBytes": null,
+   "name": "empty-object",
+   "stringify": "{}",
+   "stringifyEscapingSlashes": "{}"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "empty-array",
+   "stringify": "[]",
+   "stringifyEscapingSlashes": "[]"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "int",
+   "stringify": "42",
+   "stringifyEscapingSlashes": "42"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "negative-int",
+   "stringify": "-7",
+   "stringifyEscapingSlashes": "-7"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "zero",
+   "stringify": "0",
+   "stringifyEscapingSlashes": "0"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "true",
+   "stringify": "true",
+   "stringifyEscapingSlashes": "true"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "false",
+   "stringify": "false",
+   "stringifyEscapingSlashes": "false"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "null",
+   "stringify": "null",
+   "stringifyEscapingSlashes": "null"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "string-ascii",
+   "stringify": "\"hello\"",
+   "stringifyEscapingSlashes": "\"hello\""
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "string-empty",
+   "stringify": "\"\"",
+   "stringifyEscapingSlashes": "\"\""
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "string-slash",
+   "stringify": "\"a/b/c\"",
+   "stringifyEscapingSlashes": "\"a\\/b\\/c\""
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "string-cjk",
+   "stringify": "\"央视频电视投屏助手\"",
+   "stringifyEscapingSlashes": "\"央视频电视投屏助手\""
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "string-escapes",
+   "stringify": "\"q\\\"b\\\\s\\tt\\tn\\nl\\rr\"",
+   "stringifyEscapingSlashes": "\"q\\\"b\\\\s\\tt\\tn\\nl\\rr\""
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "string-control",
+   "stringify": "\"\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007\\b\\t\\n\\u000b\\f\\r\\u000e\\u000f\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\\u0018\\u0019\\u001a\\u001b\\u001c\\u001d\\u001e\\u001f\"",
+   "stringifyEscapingSlashes": "\"\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007\\b\\t\\n\\u000b\\f\\r\\u000e\\u000f\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\\u0018\\u0019\\u001a\\u001b\\u001c\\u001d\\u001e\\u001f\""
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "string-del",
+   "stringify": "\"\"",
+   "stringifyEscapingSlashes": "\"\""
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "string-emoji",
+   "stringify": "\"😀\"",
+   "stringifyEscapingSlashes": "\"😀\""
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "string-unicode-sp",
+   "stringify": "\"  \"",
+   "stringifyEscapingSlashes": "\"  \""
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "string-accent",
+   "stringify": "\"éèê\"",
+   "stringifyEscapingSlashes": "\"éèê\""
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "sort-ascii",
+   "stringify": "{\"0\":6,\"A\":4,\"Z\":5,\"a\":1,\"b\":2,\"c\":3}",
+   "stringifyEscapingSlashes": "{\"0\":6,\"A\":4,\"Z\":5,\"a\":1,\"b\":2,\"c\":3}"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "sort-across-types",
+   "stringify": "{\"-\":5,\"_\":4,\"a\":3,\"z\":1,\"中\":2}",
+   "stringifyEscapingSlashes": "{\"-\":5,\"_\":4,\"a\":3,\"z\":1,\"中\":2}"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "sort-nested",
+   "stringify": "{\"a\":{\"c\":3,\"d\":4},\"z\":{\"x\":2,\"y\":1}}",
+   "stringifyEscapingSlashes": "{\"a\":{\"c\":3,\"d\":4},\"z\":{\"x\":2,\"y\":1}}"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "array-of-mixed",
+   "stringify": "[1,\"two\",true,null,3.5,[4],{\"e\":5}]",
+   "stringifyEscapingSlashes": "[1,\"two\",true,null,3.5,[4],{\"e\":5}]"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "deep-nest",
+   "stringify": "{\"a\":{\"b\":{\"c\":{\"d\":[1,{\"e\":2}]}}}}",
+   "stringifyEscapingSlashes": "{\"a\":{\"b\":{\"c\":{\"d\":[1,{\"e\":2}]}}}}"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "empty-string-key",
+   "stringify": "{\"\":1,\"a\":2}",
+   "stringifyEscapingSlashes": "{\"\":1,\"a\":2}"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "numbers-in-array",
+   "stringify": "[0,1,-1,1000000,1234567890123]",
+   "stringifyEscapingSlashes": "[0,1,-1,1000000,1234567890123]"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "app-start-body",
+   "stringify": "{\"key\":\"app_start_d1\",\"value\":{\"app_key\":\"1178c84d-4818-44ff-b415-02106e87e144\",\"app_language\":\"CHINESE\",\"app_version\":\"1.0.0\",\"cctv_id\":\"BAEBFF2B-C516-4F34-ABC0-A824A6461CBD\",\"data_time\":\"1717729995180\",\"device_id\":\"abc123\",\"device_resolution\":\"3840*2160\",\"device_type\":\"TV\",\"idfa\":\"\",\"idfv\":\"\",\"imei\":\"\",\"mac\":\"aa:bb:cc:dd:ee:ff\",\"system_type\":\"Android\",\"user_id\":\"\"}}",
+   "stringifyEscapingSlashes": "{\"key\":\"app_start_d1\",\"value\":{\"app_key\":\"1178c84d-4818-44ff-b415-02106e87e144\",\"app_language\":\"CHINESE\",\"app_version\":\"1.0.0\",\"cctv_id\":\"BAEBFF2B-C516-4F34-ABC0-A824A6461CBD\",\"data_time\":\"1717729995180\",\"device_id\":\"abc123\",\"device_resolution\":\"3840*2160\",\"device_type\":\"TV\",\"idfa\":\"\",\"idfv\":\"\",\"imei\":\"\",\"mac\":\"aa:bb:cc:dd:ee:ff\",\"system_type\":\"Android\",\"user_id\":\"\"}}"
+  },
+  {
+   "compactJsonBytes": null,
+   "name": "report-with-url",
+   "stringify": "{\"app_key\":\"1178c84d-4818-44ff-b415-02106e87e144\",\"referer\":\"https://live.cctv.cn/\",\"url\":\"https://ytpaddr.cctv.cn/gsnw/api/app/start/v1/01?a=1&b=2\"}",
+   "stringifyEscapingSlashes": "{\"app_key\":\"1178c84d-4818-44ff-b415-02106e87e144\",\"referer\":\"https:\\/\\/live.cctv.cn\\/\",\"url\":\"https:\\/\\/ytpaddr.cctv.cn\\/gsnw\\/api\\/app\\/start\\/v1\\/01?a=1&b=2\"}"
+  }
+ ],
+ "ensureAscii": false,
+ "floatCases": [
+  {
+   "hexBits": "3ff0000000000000",
+   "inObject": "{\"f\":1.0}",
+   "value": "1.0"
+  },
+  {
+   "hexBits": "3fe0000000000000",
+   "inObject": "{\"f\":0.5}",
+   "value": "0.5"
+  },
+  {
+   "hexBits": "4008000000000000",
+   "inObject": "{\"f\":3.0}",
+   "value": "3.0"
+  },
+  {
+   "hexBits": "8000000000000000",
+   "inObject": "{\"f\":-0.0}",
+   "value": "-0.0"
+  },
+  {
+   "hexBits": "4004000000000000",
+   "inObject": "{\"f\":2.5}",
+   "value": "2.5"
+  },
+  {
+   "hexBits": "3fd5555555555555",
+   "inObject": "{\"f\":0.3333333333333333}",
+   "value": "0.3333333333333333"
+  },
+  {
+   "hexBits": "3fb999999999999a",
+   "inObject": "{\"f\":0.1}",
+   "value": "0.1"
+  },
+  {
+   "hexBits": "405edd2f1a9fbe77",
+   "inObject": "{\"f\":123.456}",
+   "value": "123.456"
+  },
+  {
+   "hexBits": "4341c37937e08000",
+   "inObject": "{\"f\":1e+16}",
+   "value": "1e+16"
+  },
+  {
+   "hexBits": "430c6bf526340000",
+   "inObject": "{\"f\":1000000000000000.0}",
+   "value": "1000000000000000.0"
+  },
+  {
+   "hexBits": "4376345785d8a000",
+   "inObject": "{\"f\":1e+17}",
+   "value": "1e+17"
+  },
+  {
+   "hexBits": "3f1a36e2eb1c432d",
+   "inObject": "{\"f\":0.0001}",
+   "value": "0.0001"
+  },
+  {
+   "hexBits": "3ee4f8b588e368f1",
+   "inObject": "{\"f\":1e-05}",
+   "value": "1e-05"
+  },
+  {
+   "hexBits": "3eb0c6f7a0b5ed8d",
+   "inObject": "{\"f\":1e-06}",
+   "value": "1e-06"
+  },
+  {
+   "hexBits": "3e7ad7f29abcaf48",
+   "inObject": "{\"f\":1e-07}",
+   "value": "1e-07"
+  },
+  {
+   "hexBits": "3e8421f5f40d8376",
+   "inObject": "{\"f\":1.5e-07}",
+   "value": "1.5e-07"
+  },
+  {
+   "hexBits": "4415af1d78b58c40",
+   "inObject": "{\"f\":1e+20}",
+   "value": "1e+20"
+  },
+  {
+   "hexBits": "4340000000000000",
+   "inObject": "{\"f\":9007199254740992.0}",
+   "value": "9007199254740992.0"
+  },
+  {
+   "hexBits": "3ff0000000000001",
+   "inObject": "{\"f\":1.0000000000000002}",
+   "value": "1.0000000000000002"
+  },
+  {
+   "hexBits": "419d6f34547df3b6",
+   "inObject": "{\"f\":123456789.123}",
+   "value": "123456789.123"
+  },
+  {
+   "hexBits": "3f1a36e2eb1c432d",
+   "inObject": "{\"f\":0.0001}",
+   "value": "0.0001"
+  },
+  {
+   "hexBits": "3ee4f8b588e368f1",
+   "inObject": "{\"f\":1e-05}",
+   "value": "1e-05"
+  }
+ ],
+ "generatedBy": "tools/gen_json_vectors.py via ysp-live-v9.5.py json.dumps",
+ "separators": ",:",
+ "sortKeys": true
+}

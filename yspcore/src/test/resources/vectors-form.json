@@ -1,0 +1,61 @@
+{
+ "valueCases": [
+  {
+   "encoded": "a",
+   "value": "a"
+  },
+  {
+   "encoded": "hello+world",
+   "value": "hello world"
+  },
+  {
+   "encoded": "%E4%B8%AD%E6%96%87",
+   "value": "中文"
+  },
+  {
+   "encoded": "a%3Db%26c%3Dd",
+   "value": "a=b&c=d"
+  },
+  {
+   "encoded": "%21%40%23%24%25%5E%26*%28%29",
+   "value": "!@#$%^&*()"
+  },
+  {
+   "encoded": "*-._%7E",
+   "value": "*-._~"
+  },
+  {
+   "encoded": "a%2Bb",
+   "value": "a+b"
+  },
+  {
+   "encoded": "100%25",
+   "value": "100%"
+  },
+  {
+   "encoded": "quote%27%22",
+   "value": "quote'\""
+  },
+  {
+   "encoded": "line%0Abreak",
+   "value": "line\nbreak"
+  },
+  {
+   "encoded": "%C3%A9%C3%A8",
+   "value": "éè"
+  },
+  {
+   "encoded": "appcommon=%7B%22a%22%3A1%2C%22b%22%3A%22%E4%B8%AD%E6%96%87+%2Fx%22%7D&url=https%3A%2F%2Fx.cn%2Fa+b%3Fc%3Dd%26e%3Df",
+   "pairs": [
+    [
+     "appcommon",
+     "{\"a\":1,\"b\":\"中文 /x\"}"
+    ],
+    [
+     "url",
+     "https://x.cn/a b?c=d&e=f"
+    ]
+   ]
+  }
+ ]
+}
