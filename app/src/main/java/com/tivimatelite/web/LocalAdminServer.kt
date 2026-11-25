@@ -2,7 +2,6 @@ package com.tivimatelite.web
 
 import android.app.ActivityManager
 import android.content.Context
-import android.os.Debug
 import com.tivimatelite.player.PlaybackHistoryStore
 import com.tivimatelite.ysp.YspConfig
 import com.tivimatelite.ysp.YspEngine
@@ -38,10 +37,10 @@ class LocalAdminServer(
 
     private fun handleGet(session: IHTTPSession): Response {
         return when (session.uri) {
-            "/" -> html(pageStatus(), "status")
-            "/flow" -> html(pageFlow(), "flow")
-            "/settings" -> html(pageSettings(), "settings")
-            "/logs" -> html(pageLogs(), "logs")
+            "/" -> html(pageStatus())
+            "/flow" -> html(pageFlow())
+            "/settings" -> html(pageSettings())
+            "/logs" -> html(pageLogs())
             "/api/status" -> json(statusJson())
             "/api/channels" -> json(channelsJson())
             "/api/events" -> json(eventsJson(queryLong(session, "after")))
@@ -475,9 +474,8 @@ class LocalAdminServer(
 
     private fun rssMb(): Int {
         return runCatching {
-            val info = Debug.MemoryInfo()
-            ActivityManager.getMyMemoryState(info)
-            info.totalPss / 1024
+            val manager = appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            manager.getProcessMemoryInfo(intArrayOf(android.os.Process.myPid()))[0].totalPss / 1024
         }.getOrDefault(0)
     }
 
@@ -498,7 +496,7 @@ class LocalAdminServer(
             )
         }.getOrElse {
             newFixedLengthResponse(
-                Response.Status.BAD_GATEWAY, MIME_PLAINTEXT, "engine error: ${it.message}"
+                Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "engine error: ${it.message}"
             )
         }
     }
