@@ -40,9 +40,9 @@ public final class ChannelEngine {
     private static final String TAG = "engine";
 
     /** 刷新间隔（秒），Python {@code REFRESH_INTERVAL}。 */
-    public static final int REFRESH_INTERVAL = 30;
+    public static final int REFRESH_INTERVAL = 60;
     /** 空闲多少秒后停止后台拉流，Python {@code IDLE_TIMEOUT}。 */
-    public static final int IDLE_TIMEOUT = 120;
+    public static final int IDLE_TIMEOUT = 30;
     /** 设备链接空闲回收窗口（秒），Python {@code LINK_IDLE_TIMEOUT}。 */
     public static final double LINK_IDLE_TIMEOUT = 15.0;
     /** JCE 时移窗口（秒），Python {@code WINDOW}。 */
@@ -52,9 +52,9 @@ public final class ChannelEngine {
     /** bkliveinfo 地址缓存 TTL（秒），Python {@code BK_URL_TTL}。 */
     public static final int BK_URL_TTL = 300;
     /** SWR 缓存窗口（秒）。ysp 分支放宽到 90s：上游限流时用旧列表顶住，避免直接 503。 */
-    public static final double SWR_TTL_SEC = 90.0;
+    public static final double SWR_TTL_SEC = 150.0;
     /** 超过这个年龄就顺手触发后台刷新。 */
-    public static final double SWR_REFRESH_AFTER_SEC = 15.0;
+    public static final double SWR_REFRESH_AFTER_SEC = 45.0;
     /**
      * 同一频道两次"bk 候选 CDN 轮换"的最小间隔（秒）。
      * <p>限流目的：真死的频道不能被打成无限重试；而正常的坏 CDN 一次轮换后就能恢复。
@@ -63,7 +63,7 @@ public final class ChannelEngine {
     /** bk 候选探活时检查多少个分片（分片可用性按片变化，只探首片会误杀）。 */
     private static final int PROBE_SEG_COUNT = 3;
     /** JCE 触发“操作过于频繁”后的全局冷却时间（2 分钟，给上游风控窗口留出恢复时间）。 */
-    private static final long JCE_RATE_LIMIT_COOLDOWN_MS = 120_000L;
+    private static final long JCE_RATE_LIMIT_COOLDOWN_MS = 30_000L;
 
     /** 一次 m3u8 响应的完整信息（供 HTTP 层直接写 socket）。 */
     public static final class PlaylistResult {

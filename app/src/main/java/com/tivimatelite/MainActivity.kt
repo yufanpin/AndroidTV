@@ -111,6 +111,9 @@ class MainActivity : AppCompatActivity() {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             FileLogStore.i(TAG, "onIsPlayingChanged: $isPlaying")
+            if (isPlaying) {
+                binding.engineStatusText.visibility = View.GONE
+            }
         }
     }
 
