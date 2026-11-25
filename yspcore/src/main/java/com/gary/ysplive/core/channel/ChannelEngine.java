@@ -1057,6 +1057,10 @@ public final class ChannelEngine {
                 totalLength = total;
                 count = (int) ((total + CHUNK - 1) / CHUNK);
                 contentType = conn.getContentType();
+                long firstExpected = Math.min((long) CHUNK, total);
+                if (current.length != firstExpected) {
+                    current = fetchChunk(url, baseHeaders, 0, firstExpected - 1);
+                }
                 for (int i = 1; i < count; i++) {
                     final int idx = i;
                     final long start = (long) i * CHUNK;

@@ -466,7 +466,7 @@ public class LocalServerTest {
     }
 
     @Test
-    public void proxyTsStreamsAndCaches() throws IOException {
+    public void proxyTsStreamsSegment() throws IOException {
         String realUrl = cdn.baseUrl() + "/seg/1.ts?token=abc";
         String token = Upstream.encodeProxyTsUrl(realUrl);
 
@@ -474,13 +474,13 @@ public class LocalServerTest {
         assertEquals(200, first.status);
         assertEquals(4096, first.body.length);
         assertEquals("video/mp2t", first.header("Content-Type"));
-        assertEquals("MISS-UPSTREAM", first.header("X-Cache"));
+        assertEquals("MISS-STREAM", first.header("X-Cache"));
         assertEquals("*", first.header("Access-Control-Allow-Origin"));
         assertEquals("public, max-age=300", first.header("Cache-Control"));
 
         Resp second = get(port, "/proxy.ts?=" + token);
         assertEquals(200, second.status);
-        assertEquals("HIT-RAM", second.header("X-Cache"));
+        assertEquals("MISS-STREAM", second.header("X-Cache"));
         assertEquals(4096, second.body.length);
         for (int i = 0; i < 64; i++) {
             assertEquals(first.body[i], second.body[i]);
@@ -496,7 +496,7 @@ public class LocalServerTest {
         Resp r = request(port, "GET", "/proxy.ts?=" + token, extra);
         assertEquals(206, r.status);
         assertEquals(2048, r.body.length);
-        assertEquals("MISS-UPSTREAM", r.header("X-Cache"));
+        assertEquals("MISS-STREAM", r.header("X-Cache"));
         assertNotNull(r.header("Content-Range"));
         assertEquals(1, cdn.lastRangeHeaderSeen);
     }

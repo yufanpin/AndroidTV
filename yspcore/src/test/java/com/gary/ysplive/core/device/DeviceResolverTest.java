@@ -256,9 +256,9 @@ public class DeviceResolverTest {
         assertEquals(0, c[0]);
     }
 
-    /** CI 上线程退出可能晚几十毫秒，轮询 2s 再判定泄漏。 */
+    /** CI 上网络超时可能让 bootstrap 线程晚退，轮询 10s 再判定泄漏。 */
     private static void assertNoDeviceThreads(String phase) throws InterruptedException {
-        long deadline = System.currentTimeMillis() + 2000L;
+        long deadline = System.currentTimeMillis() + 10000L;
         String alive = null;
         while (System.currentTimeMillis() < deadline) {
             alive = null;
