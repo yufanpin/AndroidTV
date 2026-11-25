@@ -43,6 +43,8 @@ public final class ChannelEngine {
     public static final int REFRESH_INTERVAL = 60;
     /** 空闲多少秒后停止后台拉流，Python {@code IDLE_TIMEOUT}。 */
     public static final int IDLE_TIMEOUT = 30;
+    /** 分片缓存超过这个年龄才允许清空重拉（必须大于 REFRESH_INTERVAL）。 */
+    public static final int CACHE_STALE_SEC = 180;
     /** 设备链接空闲回收窗口（秒），Python {@code LINK_IDLE_TIMEOUT}。 */
     public static final double LINK_IDLE_TIMEOUT = 15.0;
     /** JCE 时移窗口（秒），Python {@code WINDOW}。 */
@@ -678,7 +680,7 @@ public final class ChannelEngine {
             } else {
                 waitOnly = false;
                 threadDead = ch.threadDead();
-                boolean cacheStale = (now - ch.lastOk() > IDLE_TIMEOUT)
+                boolean cacheStale = (now - ch.lastOk() > CACHE_STALE_SEC)
                         || (!ch.hasSegments() && ch.bkPlaylist().isEmpty());
                 if (cacheStale) {
                     ch.clearBuffer();
