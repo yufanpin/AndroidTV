@@ -72,6 +72,7 @@ class MainActivity : AppCompatActivity() {
                 AppLogStore.i(TAG, "Removed failed host from playable hosts: $currentUrl")
             }
             AppLogStore.w(TAG, "Playback error, retrying current channel")
+            setEngineStatus("信号中断，正在重连…")
             // ysp 只有一条线路：出错只重连当前频道，绝不跳到下一个台
             channelSwitcher.retryCurrentSingleSource("player_error")
         }
@@ -367,6 +368,7 @@ class MainActivity : AppCompatActivity() {
             val msg = "Loaded ${channelGroups.size} channel groups from ${result.activePlaylistSource}"
             AppLogStore.i(TAG, msg)
             FileLogStore.i(TAG, msg)
+            setEngineStatus("正在连接 ${currentChannelName()}…")
             channelSwitcher.playCurrentSource(resetAttempts = true)
         }
     }

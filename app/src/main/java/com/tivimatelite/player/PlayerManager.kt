@@ -243,13 +243,17 @@ object PlayerManager {
      * 注册名缺失时 `av_opt_set_dict` 会静默忽略，属于无效设置）。
      */
     private fun applyOptions(p: IjkMediaPlayer) {
+        // x86 模拟器（MuMu 等）的 MediaCodec 列表里会出现不可用的 qcom 编码器，
+        // IJK 选中后会创建 dummy codec 并直接失败；这种环境强制走 ffmpeg 软解。
+        // 真实机顶盒（ARM）仍然使用硬解。
+        val hardwareDecode = if (isX86Emulator()) 0L else 1L
         // PLAYER(4)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-all-videos", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-avc", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-hevc", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg2", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg4", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", hardwareDecode)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-all-videos", hardwareDecode)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-avc", hardwareDecode)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-hevc", hardwareDecode)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg2", hardwareDecode)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg4", hardwareDecode)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", OPT_FRAMEDROP)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "overlay-format", OPT_OVERLAY_FORMAT_RV32)
@@ -280,4 +284,8 @@ object PlayerManager {
         val gain = String.format(Locale.US, "%.2f", audioGain)
         return String.format(Locale.US, AUDIO_GAIN_FILTER, gain)
     }
+
+    /** 当前设备是否为 x86/x86_64（MuMu 等模拟器）。 */
+    private fun isX86Emulator(): Boolean =
+        android.os.Build.SUPPORTED_ABIS?.any { it.startsWith("x86") } == true
 }
