@@ -3,10 +3,8 @@ package com.tivimatelite.loader
 import android.content.Context
 import com.tivimatelite.data.RemotePlaylistRepository
 import com.tivimatelite.model.Channel
-import com.tivimatelite.parser.M3U8Parser
 import com.tivimatelite.player.PlaybackHistoryStore
-import kotlinx.coroutines.flow.collect
-import java.io.FileNotFoundException
+import com.tivimatelite.ysp.EnginePlaylistSource
 
 data class ChannelGroup(
     val name: String,
@@ -15,23 +13,14 @@ data class ChannelGroup(
 
 class ChannelLoader(
     private val loadRemoteChannels: suspend () -> RemotePlaylistRepository.RemotePlaylistResult? = {
-        RemotePlaylistRepository.loadChannels()
+        EnginePlaylistSource.load()
     },
     private val loadLocalChannels: suspend () -> List<Channel>,
     private val getLastPlayedState: () -> PlaybackHistoryStore.LastPlayedState
 ) {
+    /** ysp 分支：频道只来自本机引擎，不再读取 assets / 远程 M3U。 */
     constructor(context: Context) : this(
-        loadLocalChannels = {
-            try {
-                val channels = ArrayList<Channel>(512)
-                context.assets.open("channels.m3u").use { input ->
-                    M3U8Parser.parse(input).collect { channel -> channels.add(channel) }
-                }
-                channels
-            } catch (_: FileNotFoundException) {
-                emptyList()
-            }
-        },
+        loadLocalChannels = { emptyList() },
         getLastPlayedState = { PlaybackHistoryStore.getLastPlayedState(context) }
     )
 

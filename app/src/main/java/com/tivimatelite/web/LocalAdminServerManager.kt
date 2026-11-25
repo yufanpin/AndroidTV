@@ -7,7 +7,7 @@ import java.util.Collections
 
 object LocalAdminServerManager {
     private const val TAG = "AdminServerManager"
-    private const val PORT = 5220
+    private const val PORT = 5221
 
     @Volatile
     private var server: LocalAdminServer? = null

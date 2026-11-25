@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+      - ysp
   pull_request:
   workflow_dispatch:
 
@@ -45,14 +46,14 @@ jobs:
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Build debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace --info
+        run: gradle assembleDebug --no-daemon --stacktrace
 
       - name: Run unit tests
-        run: gradle testDebugUnitTest --no-daemon --stacktrace --info
+        run: gradle :app:testDebugUnitTest :yspcore:testDebugUnitTest --no-daemon --stacktrace
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: TiviMateLite-debug-apk
+          name: YSPTV-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error

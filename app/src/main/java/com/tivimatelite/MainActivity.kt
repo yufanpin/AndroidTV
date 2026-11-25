@@ -6,7 +6,6 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.SurfaceHolder
 import androidx.appcompat.app.AppCompatActivity
-import com.tivimatelite.data.RemotePlaylistRepository
 import com.tivimatelite.databinding.ActivityMainBinding
 import com.tivimatelite.input.InputHandler
 import com.tivimatelite.loader.ChannelGroup
@@ -21,7 +20,10 @@ import com.tivimatelite.web.AppLogStore
 import com.tivimatelite.web.AudioGainPrefs
 import com.tivimatelite.web.FileLogStore
 import com.tivimatelite.web.LocalAdminServerManager
-import com.tivimatelite.web.PlaylistStore
+import com.tivimatelite.ysp.YspConfig
+import com.tivimatelite.ysp.YspEngine
+import com.tivimatelite.ysp.YspEngineService
+import com.tivimatelite.ysp.YspEvents
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
@@ -44,7 +46,8 @@ class MainActivity : AppCompatActivity() {
     private var readyStallIgnoreUntilMs = 0L
     private var lastReadyStallRecoveryAtMs = 0L
     private var lastPlaylistFingerprint: String? = null
-    private var activePlaylistSource = "local assets/channels.m3u"
+    private var activePlaylistSource = "ysp 本机引擎"
+    private var channelNameHideJob: Job? = null
 
     /** SurfaceHolder.Callback ȷ�����洴��/�ؽ�ʱ������ʱ��棬�ƹ� Amlogic HWC ������� bug */
     private val surfaceCallback = object : SurfaceHolder.Callback {
@@ -83,6 +86,8 @@ class MainActivity : AppCompatActivity() {
                     channelSwitcher.cancelBufferingFailover()
                     channelSwitcher.cancelLoadTimeout()
                     startReadyStallWatch()
+                    binding.engineStatusText.visibility = View.GONE
+                    YspEvents.record(currentChannelName(), YspEvents.STAGE_PLAYER, "播放器 READY")
                     // P0: 线路播放成功→记忆域�?
                     val url = PlayerManager.currentUrl
                     if (url != null) {
@@ -115,8 +120,11 @@ class MainActivity : AppCompatActivity() {
         binding.playerSurface.setZOrderMediaOverlay(true)
         binding.backendInfoText.bringToFront()
         binding.channelNumberText.bringToFront()
+        binding.channelNameText.bringToFront()
+        binding.engineStatusText.bringToFront()
         binding.netSpeedText.bringToFront()
 
+        YspEngineService.start(this)
         LocalAdminServerManager.start(this)
         AppLogStore.i(TAG, "Admin ready at ${LocalAdminServerManager.getAdminUrl()}")
 
@@ -129,7 +137,10 @@ class MainActivity : AppCompatActivity() {
             getCurrentSourceIndex = { currentSourceIndex },
             setCurrentSourceIndex = { currentSourceIndex = it },
             getActivePlaylistSource = { activePlaylistSource },
-            showChannelNumberOverlay = { text -> inputHandler.showChannelNumberOverlay(text) },
+            showChannelNumberOverlay = { text ->
+                inputHandler.showChannelNumberOverlay(text)
+                showChannelNameFor(text)
+            },
             onReadyStallWarmup = {
                 cancelReadyStallWatch()
                 readyStallIgnoreUntilMs = System.currentTimeMillis() + READY_STALL_WARMUP_MS
@@ -166,9 +177,9 @@ class MainActivity : AppCompatActivity() {
             },
             getNowMs = { System.currentTimeMillis() },
             getTotalRxBytes = { TrafficStats.getTotalRxBytes() },
-            getPlaylistFingerprint = { PlaylistStore.getConfigFingerprint(this) },
+            getPlaylistFingerprint = { YspConfig.load(this).restartFingerprint() },
             onPlaylistChanged = {
-                lastPlaylistFingerprint = PlaylistStore.getConfigFingerprint(this)
+                lastPlaylistFingerprint = YspConfig.load(this).restartFingerprint()
                 AppLogStore.i(TAG, "Playlist config changed, reloading channels")
                 reloadChannelsKeepingCurrent()
             },
@@ -207,7 +218,8 @@ class MainActivity : AppCompatActivity() {
 
         // 先于首次 prepare 应用持久化增益，保证开机首个频道就带正确滤镜
         PlayerManager.setAudioGain(AudioGainPrefs.loadGain(this))
-        lastPlaylistFingerprint = PlaylistStore.getConfigFingerprint(this)
+        lastPlaylistFingerprint = YspConfig.load(this).restartFingerprint()
+        binding.engineStatusText.visibility = View.VISIBLE
         loadChannels()
         readyStallWatch.startPlaylistWatcher(lastPlaylistFingerprint.orEmpty())
         readyStallWatch.startNetworkSpeedMonitor()
@@ -227,12 +239,12 @@ class MainActivity : AppCompatActivity() {
                 requestSwitchByDelta(1)
                 true
             }
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                channelSwitcher.requestSourceSwitchByDelta(-1)
-                true
-            }
+            KeyEvent.KEYCODE_DPAD_LEFT,
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                channelSwitcher.requestSourceSwitchByDelta(1)
+                AppLogStore.i(TAG, "User reconnect current channel")
+                FileLogStore.i(TAG, "User reconnect current channel")
+                showReconnectBadge()
+                channelSwitcher.retryCurrentSingleSource("user_reconnect")
                 true
             }
             KeyEvent.KEYCODE_DPAD_CENTER,
@@ -297,6 +309,7 @@ class MainActivity : AppCompatActivity() {
         if (isFinishing) {
             PlayerManager.release()
             LocalAdminServerManager.stop()
+            YspEngineService.stop(this)
         }
         super.onDestroy()
     }
@@ -315,10 +328,32 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadChannels() {
         scope.launch {
-            val result = channelLoader.loadInitial()
+            val deadline = System.currentTimeMillis() + ENGINE_WAIT_TIMEOUT_MS
+            var result: ChannelLoader.LoadResult? = null
+            while (System.currentTimeMillis() < deadline) {
+                val engine = YspEngine.state.value
+                when {
+                    engine.failed -> {
+                        setEngineStatus("引擎启动失败：${engine.error.ifBlank { "未知错误" }}")
+                        AppLogStore.e(TAG, "Engine failed: ${engine.error}")
+                        return@launch
+                    }
+                    engine.ready -> {
+                        setEngineStatus("正在加载频道…")
+                        result = channelLoader.loadInitial()
+                        if (result != null) break
+                    }
+                    else -> setEngineStatus(
+                        engine.stage.ifBlank { "正在启动直播引擎…" }
+                    )
+                }
+                delay(400)
+            }
+
             if (result == null) {
-                AppLogStore.e(TAG, "No channels available")
-                FileLogStore.e(TAG, "No channels available")
+                setEngineStatus("引擎未就绪，请访问 设备IP:${LocalAdminServerManager.getPort()} 查看日志")
+                AppLogStore.e(TAG, "Engine not ready, no channels loaded")
+                FileLogStore.e(TAG, "Engine not ready, no channels loaded")
                 return@launch
             }
 
@@ -327,10 +362,45 @@ class MainActivity : AppCompatActivity() {
             currentSourceIndex = result.selection.sourceIndex
             activePlaylistSource = result.activePlaylistSource
 
-            val msg = "Loaded ${channelGroups.size} channel groups"
+            val msg = "Loaded ${channelGroups.size} channel groups from ${result.activePlaylistSource}"
             AppLogStore.i(TAG, msg)
             FileLogStore.i(TAG, msg)
             channelSwitcher.playCurrentSource(resetAttempts = true)
+        }
+    }
+
+    private fun setEngineStatus(text: String) {
+        binding.engineStatusText.text = text
+        binding.engineStatusText.visibility = View.VISIBLE
+    }
+
+    private fun currentChannelName(): String =
+        channelGroups.getOrNull(currentChannelIndex)?.name.orEmpty()
+
+    /** 换台/数字选台时在左下角显示台名。 */
+    private fun showChannelNameFor(text: String) {
+        val index = text.trim().toIntOrNull()?.minus(1)
+        val name = index?.let { channelGroups.getOrNull(it)?.name }
+        if (name.isNullOrBlank()) {
+            binding.channelNameText.visibility = View.GONE
+            return
+        }
+        binding.channelNameText.text = name
+        binding.channelNameText.visibility = View.VISIBLE
+        channelNameHideJob?.cancel()
+        channelNameHideJob = scope.launch {
+            delay(CHANNEL_NAME_HIDE_MS)
+            binding.channelNameText.visibility = View.GONE
+        }
+    }
+
+    private fun showReconnectBadge() {
+        binding.channelNameText.text = "重连当前频道"
+        binding.channelNameText.visibility = View.VISIBLE
+        channelNameHideJob?.cancel()
+        channelNameHideJob = scope.launch {
+            delay(CHANNEL_NAME_HIDE_MS)
+            binding.channelNameText.visibility = View.GONE
         }
     }
 
@@ -393,10 +463,13 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val probe = RemotePlaylistRepository.getLastProbeInfo()
+        val engine = YspEngine.state.value
         val text = buildString {
-            append("Detected IP: ")
-            append(probe.localIp ?: "unknown")
+            append("Engine: ")
+            append(if (engine.running) "ready :${engine.port}" else "starting")
+            append('\n')
+            append("Channels: ")
+            append(channelGroups.size)
             append('\n')
             append("Admin URL: ")
             append(LocalAdminServerManager.getAdminUrl())
@@ -426,5 +499,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val BACKEND_INFO_AUTO_HIDE_MS = 4000L
         private const val READY_STALL_WARMUP_MS = 60000L
+        private const val ENGINE_WAIT_TIMEOUT_MS = 25000L
+        private const val CHANNEL_NAME_HIDE_MS = 1800L
     }
 }
