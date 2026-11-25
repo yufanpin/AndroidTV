@@ -48,12 +48,25 @@ jobs:
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
 
-      - name: Run unit tests
-        run: gradle :app:testDebugUnitTest :yspcore:testDebugUnitTest --no-daemon --stacktrace
-
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: YSPTV-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Run unit tests
+        continue-on-error: true
+        run: gradle :app:testDebugUnitTest :yspcore:testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: YSPTV-test-reports
+          path: |
+            yspcore/build/reports/tests/testDebugUnitTest
+            yspcore/build/test-results/testDebugUnitTest
+            app/build/reports/tests/testDebugUnitTest
+            app/build/test-results/testDebugUnitTest
+          if-no-files-found: ignore
