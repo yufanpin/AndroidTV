@@ -40,7 +40,7 @@ public final class ChannelEngine {
     private static final String TAG = "engine";
 
     /** 刷新间隔（秒），Python {@code REFRESH_INTERVAL}。 */
-    public static final int REFRESH_INTERVAL = 15;
+    public static final int REFRESH_INTERVAL = 30;
     /** 空闲多少秒后停止后台拉流，Python {@code IDLE_TIMEOUT}。 */
     public static final int IDLE_TIMEOUT = 120;
     /** 设备链接空闲回收窗口（秒），Python {@code LINK_IDLE_TIMEOUT}。 */
@@ -1032,7 +1032,129 @@ public final class ChannelEngine {
                 body.close();
             } catch (IOException ignored) {
             }
-            connection.disconnect();
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    /**
+     * 按 256KB Range 分块拉取的上游流。
+     * <p>部分 CDN（如央视频 tlivecloud-playback-cdn）对完整 GET 会限速到 ~50KB/s，
+     * 但 256KB Range 请求可以跑满带宽；分块串行取流能把 1080p 分片的起播时间从
+     * 30s+ 压到 2s 左右。
+     */
+    static final class ChunkedSegmentInput extends InputStream {
+        private static final int CHUNK = 256 * 1024;
+        private final String url;
+        private final Map<String, String> baseHeaders;
+        private HttpURLConnection connection;
+        private InputStream current;
+        private long total = -1L;
+        private long pos = 0L;
+        private boolean first = true;
+        String contentType;
+        long totalLength = -1L;
+
+        ChunkedSegmentInput(String url, Map<String, String> baseHeaders) {
+            this.url = url;
+            this.baseHeaders = baseHeaders;
+        }
+
+        void openFirst() throws IOException {
+            openNext();
+        }
+
+        private void openNext() throws IOException {
+            long start = pos;
+            Map<String, String> headers = new LinkedHashMap<>(baseHeaders);
+            headers.put("Range", "bytes=" + start + "-" + (start + CHUNK - 1));
+            HttpURLConnection conn = Upstream.openStream(url, headers, 20000);
+            int status;
+            try {
+                status = conn.getResponseCode();
+            } catch (IOException e) {
+                conn.disconnect();
+                throw e;
+            }
+            if (status == 200) {
+                total = conn.getContentLengthLong();
+                current = conn.getInputStream();
+                connection = conn;
+                first = false;
+                return;
+            }
+            if (status == 416) {
+                // 已经读到文件末尾
+                total = pos;
+                conn.disconnect();
+                current = null;
+                connection = null;
+                return;
+            }
+            if (status != 206) {
+                conn.disconnect();
+                throw new IOException("upstream HTTP " + status);
+            }
+            if (first) {
+                String contentRange = conn.getHeaderField("Content-Range");
+                total = parseTotal(contentRange);
+                contentType = conn.getContentType();
+                totalLength = total;
+                first = false;
+            }
+            current = conn.getInputStream();
+            connection = conn;
+        }
+
+        private static long parseTotal(String contentRange) {
+            if (contentRange == null) return -1L;
+            int slash = contentRange.lastIndexOf('/');
+            if (slash < 0 || slash + 1 >= contentRange.length()) return -1L;
+            try {
+                return Long.parseLong(contentRange.substring(slash + 1).trim());
+            } catch (NumberFormatException e) {
+                return -1L;
+            }
+        }
+
+        @Override
+        public int read() throws IOException {
+            byte[] one = new byte[1];
+            int n = read(one, 0, 1);
+            return n <= 0 ? -1 : one[0] & 0xFF;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            while (true) {
+                if (current == null) {
+                    if (total >= 0 && pos >= total) return -1;
+                    openNext();
+                }
+                int n = current.read(b, off, len);
+                if (n > 0) {
+                    pos += n;
+                    return n;
+                }
+                closeCurrent();
+                if (total >= 0 && pos >= total) return -1;
+            }
+        }
+
+        private void closeCurrent() {
+            try {
+                if (current != null) current.close();
+            } catch (IOException ignored) {
+            }
+            if (connection != null) connection.disconnect();
+            current = null;
+            connection = null;
+        }
+
+        @Override
+        public void close() {
+            closeCurrent();
         }
     }
 
@@ -1062,6 +1184,18 @@ public final class ChannelEngine {
             extra.put("Range", Upstream.headerValueClean(rangeHeader));
         }
         Map<String, String> headers = Upstream.playbackRequestHeaders(playbackHeaders, extra);
+        boolean noRange = rangeHeader == null || rangeHeader.trim().isEmpty();
+        if (noRange) {
+            ChunkedSegmentInput chunked = new ChunkedSegmentInput(realUrl, headers);
+            chunked.openFirst();
+            Map<String, String> outHeaders = new LinkedHashMap<>();
+            outHeaders.put("Content-Type",
+                    chunked.contentType == null ? "video/mp2t" : chunked.contentType);
+            if (chunked.totalLength > 0) {
+                outHeaders.put("Content-Length", String.valueOf(chunked.totalLength));
+            }
+            return new SegmentStream(null, chunked, 200, outHeaders, chunked.totalLength);
+        }
         HttpURLConnection connection = Upstream.openStream(realUrl, headers, 25000);
         int status;
         try {
