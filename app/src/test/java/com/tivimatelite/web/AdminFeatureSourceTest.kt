@@ -6,17 +6,19 @@ import org.junit.Test
 class AdminFeatureSourceTest {
 
     @Test
-    fun localAdminServer_containsBootToggleAndPasteContentRoutes() {
+    fun localAdminServer_containsYspConsoleRoutes() {
         val source = java.io.File(
             "src/main/java/com/tivimatelite/web/LocalAdminServer.kt"
         ).readText()
 
+        assertTrue(source.contains("/api/status"))
+        assertTrue(source.contains("/api/events"))
+        assertTrue(source.contains("/api/logs"))
+        assertTrue(source.contains("/config"))
+        assertTrue(source.contains("/engine/restart"))
+        assertTrue(source.contains("高码率"))
+        assertTrue(source.contains("事件流"))
         assertTrue(source.contains("/boot/toggle"))
-        assertTrue(source.contains("/source/add-content"))
-        assertTrue(source.contains("开机自动启动 App"))
-        assertTrue(source.contains("直接粘贴直播源内容"))
-        assertTrue(source.contains("可选方式"))
-        assertTrue(source.contains("<details"))
     }
 
     @Test

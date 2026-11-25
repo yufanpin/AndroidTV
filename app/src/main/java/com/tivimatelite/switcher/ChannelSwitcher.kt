@@ -333,7 +333,7 @@ class ChannelSwitcher(
         private const val CHANNEL_ZAP_DEBOUNCE_MS = 300L
         private const val SOURCE_SWITCH_DEBOUNCE_MS = 300L
         private const val BUFFERING_FAILOVER_MS = 35000L
-        private const val SINGLE_SOURCE_RETRY_BASE_MS = 6000L
+        private const val SINGLE_SOURCE_RETRY_BASE_MS = 5000L
         private const val SINGLE_SOURCE_RETRY_MAX_MS = 30000L
         private const val SINGLE_SOURCE_RETRY_MIN_GAP_MS = 10000L
         private const val SINGLE_SOURCE_RETRY_MAX_COUNT = 5
