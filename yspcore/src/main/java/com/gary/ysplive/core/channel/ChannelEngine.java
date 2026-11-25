@@ -780,8 +780,11 @@ public final class ChannelEngine {
             }
         }
 
-        // 2) 设备协议（高码率）
-        if (ChannelTable.isBackendChannel(canonical) && resolverReady() && resolver != null) {
+        // 2) 设备协议（高码率）。disableHighBitrate / only4k 在这里真正生效。
+        boolean deviceAllowed = !config.disableHighBitrate
+                && (!config.only4kHighBitrate || ChannelTable.isTrue4k(canonical));
+        if (deviceAllowed && ChannelTable.isBackendChannel(canonical)
+                && resolverReady() && resolver != null) {
             if (!resolver.isChannelInCooldown(canonical)) {
                 try {
                     String pl = devicePlaylist(ch, host, scheme);

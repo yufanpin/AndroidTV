@@ -150,4 +150,18 @@ class M3U8ParserTest {
         assertEquals("央视", result[0].epgText)
         assertEquals("No EPG data", result[1].epgText)
     }
+
+    @Test
+    fun `header with comma separated epg urls is not parsed as channel`() = runTest {
+        val m3u = """
+            #EXTM3U url-tvg="https://epg.example/a.xml.gz,https://epg.example/b.xml.gz" x-tvg-url="https://epg.example/a.xml.gz"
+            #EXTINF:-1 tvg-name="CCTV 1" group-title="央视",CCTV 1
+            http://127.0.0.1:8767/cctv1.m3u8
+        """.trimIndent()
+        val input = ByteArrayInputStream(m3u.toByteArray())
+        val result = M3U8Parser.parse(input).toList()
+        assertEquals(1, result.size)
+        assertEquals("CCTV 1", result[0].name)
+        assertEquals("http://127.0.0.1:8767/cctv1.m3u8", result[0].streamUrl)
+    }
 }

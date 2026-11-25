@@ -34,7 +34,7 @@ object M3U8Parser {
                                 )
                             )
                         }
-                        pendingInfo == null && line.isSimpleChannelLine() -> {
+                        pendingInfo == null && !line.startsWith("#") && line.isSimpleChannelLine() -> {
                             val separator = line.indexOf(URL_SEPARATOR)
                             send(
                                 Channel(
