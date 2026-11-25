@@ -9,6 +9,8 @@ import com.gary.ysplive.core.spi.ResolutionException;
 import com.gary.ysplive.core.spi.Resolver;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -1002,6 +1004,98 @@ public final class ChannelEngine {
     }
 
     // ------------------------------------------------------------------ 分片代理
+
+    /** 流式分片：不整体入内存，直接边下边发给播放器。 */
+    public static final class SegmentStream implements java.io.Closeable {
+        public final int status;
+        public final Map<String, String> headers;
+        public final long contentLength;
+        private final HttpURLConnection connection;
+        private final InputStream body;
+
+        SegmentStream(HttpURLConnection connection, InputStream body, int status,
+                      Map<String, String> headers, long contentLength) {
+            this.connection = connection;
+            this.body = body;
+            this.status = status;
+            this.headers = headers;
+            this.contentLength = contentLength;
+        }
+
+        public InputStream body() {
+            return body;
+        }
+
+        @Override
+        public void close() {
+            try {
+                body.close();
+            } catch (IOException ignored) {
+            }
+            connection.disconnect();
+        }
+    }
+
+    /**
+     * 打开一个分片的上游流。与 {@link #fetchSegmentEx} 的区别是不缓存、不整片读入内存，
+     * 适合 2MB 级别的 1080p 分片和低内存设备。
+     */
+    public SegmentStream openSegmentStream(String realUrl, String rangeHeader) throws IOException {
+        if (realUrl == null || realUrl.isEmpty()) {
+            throw new IllegalArgumentException("empty ts url");
+        }
+        String scheme = UrlX.schemeOf(realUrl);
+        if (!"http".equals(scheme) && !"https".equals(scheme)) {
+            throw new IllegalArgumentException("invalid ts scheme: " + scheme);
+        }
+        Map<String, String> playbackHeaders = new LinkedHashMap<>();
+        if (resolver != null) {
+            try {
+                Map<String, String> h = resolver.playbackHeadersForTsUrl(realUrl);
+                if (h != null) playbackHeaders.putAll(h);
+            } catch (ResolutionException e) {
+                throw new IOException("取分片签名头失败: " + e.getMessage(), e);
+            }
+        }
+        Map<String, String> extra = new LinkedHashMap<>();
+        if (rangeHeader != null && !rangeHeader.trim().isEmpty()) {
+            extra.put("Range", Upstream.headerValueClean(rangeHeader));
+        }
+        Map<String, String> headers = Upstream.playbackRequestHeaders(playbackHeaders, extra);
+        HttpURLConnection connection = Upstream.openStream(realUrl, headers, 25000);
+        int status;
+        try {
+            status = connection.getResponseCode();
+        } catch (IOException e) {
+            connection.disconnect();
+            throw e;
+        }
+        Map<String, String> pass = new LinkedHashMap<>();
+        for (Map.Entry<String, List<String>> e : connection.getHeaderFields().entrySet()) {
+            String k = e.getKey();
+            if (k == null || e.getValue() == null || e.getValue().isEmpty()) continue;
+            String lower = k.toLowerCase(Locale.ROOT);
+            if (lower.equals("content-type") || lower.equals("content-range")
+                    || lower.equals("accept-ranges") || lower.equals("content-length")) {
+                pass.put(k, e.getValue().get(0));
+            }
+        }
+        long length = -1L;
+        String cl = Upstream.headerOrNull(pass, "content-length");
+        if (cl != null) {
+            try {
+                length = Long.parseLong(cl.trim());
+            } catch (NumberFormatException ignored) {
+                length = -1L;
+            }
+        }
+        InputStream body = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+        if (body == null) {
+            connection.disconnect();
+            throw new IOException("empty upstream body, HTTP " + status);
+        }
+        return new SegmentStream(connection, body, status, pass, length);
+    }
 
     /**
      * 取一个 TS 分片（{@code /proxy.ts} 的实现核心）。

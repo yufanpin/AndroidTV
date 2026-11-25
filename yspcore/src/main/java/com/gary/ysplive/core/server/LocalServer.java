@@ -429,9 +429,9 @@ public final class LocalServer {
                 return;
             }
             String rangeHeader = req.header("range");
-            ChannelEngine.SegmentResult seg;
+            ChannelEngine.SegmentStream stream;
             try {
-                seg = engine.fetchSegmentEx(realUrl, rangeHeader);
+                stream = engine.openSegmentStream(realUrl, rangeHeader);
             } catch (IllegalArgumentException e) {
                 sendText(out, req, 400, e.getMessage() + "\n",
                         "text/plain; charset=utf-8", keepAlive, null);
@@ -441,20 +441,53 @@ public final class LocalServer {
                         "text/plain; charset=utf-8", keepAlive, null);
                 return;
             }
-            if (seg.data.length > MAX_PROXY_BYTES) {
-                sendText(out, req, 502, "upstream segment too large\n",
-                        "text/plain; charset=utf-8", keepAlive, null);
-                return;
+            try {
+                if (stream.status >= 400) {
+                    byte[] detail = readSmall(stream.body(), 4096);
+                    sendText(out, req, 502,
+                            "Upstream CDN HTTP " + stream.status + ": "
+                                    + new String(detail, java.nio.charset.StandardCharsets.UTF_8) + "\n",
+                            "text/plain; charset=utf-8", keepAlive, null);
+                    return;
+                }
+                if (stream.contentLength > MAX_PROXY_BYTES) {
+                    sendText(out, req, 502, "upstream segment too large\n",
+                            "text/plain; charset=utf-8", keepAlive, null);
+                    return;
+                }
+                sendResponse(stream.status);
+                for (Map.Entry<String, String> e : stream.headers.entrySet()) {
+                    send_header(e.getKey(), e.getValue());
+                }
+                send_header("X-Cache", "MISS-STREAM");
+                send_header("Access-Control-Allow-Origin", "*");
+                send_header("Cache-Control", "public, max-age=300");
+                end_headers();
+                if (!req.headOnly) {
+                    byte[] buffer = new byte[64 * 1024];
+                    int n;
+                    while ((n = stream.body().read(buffer)) > 0) {
+                        out.write(buffer, 0, n);
+                    }
+                }
+            } catch (java.net.SocketException | java.io.EOFException ignored) {
+                // 播放器主动断开
+            } finally {
+                stream.close();
             }
-            Map<String, String> headers = new LinkedHashMap<>(seg.headers);
-            headers.put("X-Cache", seg.cacheState);
-            headers.put("Access-Control-Allow-Origin", "*");
-            headers.put("Cache-Control", "public, max-age=300");
-            String ctype = Upstream.headerOrNull(seg.headers, "content-type");
-            if (ctype == null || ctype.isEmpty()) {
-                ctype = "video/mp2t";
+        }
+
+        private static byte[] readSmall(InputStream in, int limit) {
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream(Math.min(limit, 512));
+            try {
+                byte[] buf = new byte[512];
+                int n;
+                while (bos.size() < limit && (n = in.read(buf)) > 0) {
+                    bos.write(buf, 0, Math.min(n, limit - bos.size()));
+                }
+            } catch (IOException ignored) {
             }
-            writeResponse(out, seg.status, ctype, seg.data, req.headOnly, keepAlive, headers, true);
+            return bos.toByteArray();
         }
 
         private void handleEngineProxy(Request req, OutputStream out, String query, boolean keepAlive)

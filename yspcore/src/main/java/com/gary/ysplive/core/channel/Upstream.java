@@ -248,6 +248,36 @@ public final class Upstream {
         return httpRequest("GET", url, headers, null, timeoutMs, true);
     }
 
+    /** 打开一个不缓冲的 GET 连接，供 {@code /proxy.ts} 边下边发。 */
+    public static HttpURLConnection openStream(String url, Map<String, String> headers, int timeoutMs)
+            throws IOException {
+        URL u = new URL(url);
+        URLConnection raw = u.openConnection(Proxy.NO_PROXY);
+        if (!(raw instanceof HttpURLConnection)) {
+            throw new IOException("not an http(s) url: " + url);
+        }
+        HttpURLConnection conn = (HttpURLConnection) raw;
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(Math.max(1000, timeoutMs));
+        conn.setReadTimeout(Math.max(1000, timeoutMs));
+        conn.setInstanceFollowRedirects(true);
+        conn.setUseCaches(false);
+        if (headers != null) {
+            for (Map.Entry<String, String> e : headers.entrySet()) {
+                String k = e.getKey();
+                String v = e.getValue();
+                if (k == null || v == null || k.isEmpty()) continue;
+                String lower = k.toLowerCase(Locale.ROOT);
+                if (lower.equals("host") || lower.equals("connection")
+                        || lower.equals("content-length") || lower.equals("accept-encoding")) {
+                    continue;
+                }
+                conn.setRequestProperty(k, headerValueClean(v));
+            }
+        }
+        return conn;
+    }
+
     /**
      * 原始 HTTP 请求。
      * <p>注意：{@link HttpURLConnection} 不允许自由设置 {@code Host}/{@code Connection} 等
