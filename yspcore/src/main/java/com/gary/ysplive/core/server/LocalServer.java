@@ -455,14 +455,17 @@ public final class LocalServer {
                             "text/plain; charset=utf-8", keepAlive, null);
                     return;
                 }
-                sendResponse(stream.status);
+                StringBuilder head = new StringBuilder(256);
+                head.append("HTTP/1.0 ").append(stream.status).append(' ')
+                        .append(reasonPhrase(stream.status)).append("\r\n");
                 for (Map.Entry<String, String> e : stream.headers.entrySet()) {
-                    send_header(e.getKey(), e.getValue());
+                    head.append(e.getKey()).append(": ").append(e.getValue()).append("\r\n");
                 }
-                send_header("X-Cache", "MISS-STREAM");
-                send_header("Access-Control-Allow-Origin", "*");
-                send_header("Cache-Control", "public, max-age=300");
-                end_headers();
+                head.append("X-Cache: MISS-STREAM\r\n")
+                        .append("Access-Control-Allow-Origin: *\r\n")
+                        .append("Cache-Control: public, max-age=300\r\n")
+                        .append("Connection: close\r\n\r\n");
+                out.write(head.toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
                 if (!req.headOnly) {
                     byte[] buffer = new byte[64 * 1024];
                     int n;
