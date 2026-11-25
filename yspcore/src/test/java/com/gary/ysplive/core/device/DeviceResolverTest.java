@@ -63,13 +63,8 @@ public class DeviceResolverTest {
         r.stop();
         r.stop();       // 重复 stop 必须安全
 
-        // 关键：stop 之后不能再有我们起的线程活着
-        for (Thread t : Thread.getAllStackTraces().keySet()) {
-            String name = t.getName();
-            if (name.startsWith("device-") && t.isAlive()) {
-                fail("stop 之后仍有线程存活: " + name);
-            }
-        }
+        // 关键：stop 之后不能再有我们起的线程活着（CI 调度慢，给 2s 收尾）
+        assertNoDeviceThreads("stop 之后");
     }
 
     /**
@@ -98,12 +93,7 @@ public class DeviceResolverTest {
             DeviceResolver r = offlineResolver();
             r.start();
             r.stop();
-            for (Thread t : Thread.getAllStackTraces().keySet()) {
-                String name = t.getName();
-                if (name.startsWith("device-") && t.isAlive()) {
-                    fail("第 " + (i + 1) + " 轮 stop 后仍有线程存活: " + name);
-                }
-            }
+            assertNoDeviceThreads("第 " + (i + 1) + " 轮 stop 后");
         }
     }
 
@@ -264,5 +254,26 @@ public class DeviceResolverTest {
         long[] c = r.counters();
         assertEquals(2, c.length);
         assertEquals(0, c[0]);
+    }
+
+    /** CI 上线程退出可能晚几十毫秒，轮询 2s 再判定泄漏。 */
+    private static void assertNoDeviceThreads(String phase) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 2000L;
+        String alive = null;
+        while (System.currentTimeMillis() < deadline) {
+            alive = null;
+            for (Thread t : Thread.getAllStackTraces().keySet()) {
+                String name = t.getName();
+                if (name.startsWith("device-") && t.isAlive()) {
+                    alive = name;
+                    break;
+                }
+            }
+            if (alive == null) {
+                return;
+            }
+            Thread.sleep(50L);
+        }
+        fail(phase + "仍有线程存活: " + alive);
     }
 }
