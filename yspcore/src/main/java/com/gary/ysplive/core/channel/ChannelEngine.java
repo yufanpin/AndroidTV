@@ -797,7 +797,8 @@ public final class ChannelEngine {
         if (catchup != null && ChannelTable.supportsTimeshift(canonical)) {
             String pl = timeshiftPlaylist(ch, catchup);
             if (pl != null) {
-                return new PlaylistResult(200, pl, "application/vnd.apple.mpegurl", null);
+                return new PlaylistResult(200, proxySegments(pl, scheme, host),
+                        "application/vnd.apple.mpegurl", null);
             }
         }
 
@@ -854,7 +855,8 @@ public final class ChannelEngine {
             if (cachedAge > SWR_REFRESH_AFTER_SEC) {
                 triggerBackgroundRefresh(ch);
             }
-            return new PlaylistResult(200, cachedPl, "application/vnd.apple.mpegurl", headers);
+            return new PlaylistResult(200, proxySegments(cachedPl, scheme, host),
+                    "application/vnd.apple.mpegurl", headers);
         }
 
         // 4) 1080p 备用通道
@@ -872,7 +874,8 @@ public final class ChannelEngine {
             if (Channel.SOURCE_DEVICE.equals(prevSrc)) {
                 pl = Upstream.injectHlsDiscontinuity(pl);
             }
-            return new PlaylistResult(200, pl, "application/vnd.apple.mpegurl", null);
+            return new PlaylistResult(200, proxySegments(pl, scheme, host),
+                    "application/vnd.apple.mpegurl", null);
         }
 
         // 5) 上游引擎（兼容另一个本地 ysp-live 的 8787 引擎）
@@ -888,6 +891,31 @@ public final class ChannelEngine {
         String body = "频道 " + ch.name() + " 暂无数据 ("
                 + (err.isEmpty() ? "拉取中" : err) + "), 请稍后重试\n";
         return new PlaylistResult(503, body, "text/plain; charset=utf-8", null);
+    }
+
+    /**
+     * 把播放列表里的分片地址改写成本机 {@code /proxy.ts} 代理。
+     * <p>原因：部分 CDN 只对 IPv6 可达/直连不稳，而播放器在本机走 IPv4 回环最稳；
+     * 同时引擎侧可以做统一 UA、Range 与内存缓存。
+     */
+    private String proxySegments(String playlist, String proto, String host) {
+        if (playlist == null || playlist.isEmpty() || playlist.contains("/proxy.ts?")) {
+            return playlist;
+        }
+        String origin = proto + "://" + host;
+        StringBuilder out = new StringBuilder(playlist.length() + 256);
+        String[] lines = playlist.split("\n", -1);
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty() && !trimmed.startsWith("#")
+                    && (trimmed.startsWith("http://") || trimmed.startsWith("https://"))) {
+                out.append(origin).append("/proxy.ts?=")
+                        .append(Upstream.encodeProxyTsUrl(trimmed)).append('\n');
+            } else {
+                out.append(line).append('\n');
+            }
+        }
+        return out.toString();
     }
 
     /**
