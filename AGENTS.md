@@ -1,5 +1,12 @@
 # TiviMateLite — Agent 指南
 
+> **当前分支：`ysp`（YSP TV）**
+> App 名 `YSP TV`，包名 `com.tivimatelite.ysp`；频道唯一来源是本机引擎
+> `http://127.0.0.1:8767/all.m3u`（`:yspcore`，纯 Java，262 个单测）。
+> Web 控制台端口为 **5221**（状态/流程/设置/日志），不再是 main 分支的源管理后台。
+> `assets/channels.m3u`、`RemotePlaylistRepository` 与多源切换逻辑在本分支不参与运行。
+> `main` 分支保持原 M3U 播放器不变。
+
 项目：Android TV IPTV 播放器，专为晶晨 S905L3（2GB RAM、Android 9）低端机顶盒打造。
 像素级致敬 TiviMate 架构，RAM 目标 ≤60MB，秒切台，不掉帧。
 
@@ -89,7 +96,7 @@ powershell -c "while(1){sleep 5; adb shell echo alive > $null}"
 | `data/RemotePlaylistRepository.kt` | 远程/本机候选源探测与拉取 |
 | `ui/ChannelAdapter.kt` | RecyclerView 适配器，DiffUtil + Glide RGB_565 |
 | `util/HttpFetcher.kt` | HTTP 拉取工具 |
-| `web/LocalAdminServer.kt` | NanoHTTPD Web 后台（端口 5220） |
+| `web/LocalAdminServer.kt` | NanoHTTPD Web 后台（端口 5221） |
 | `web/LocalAdminServerManager.kt` | 后台生命周期管理 + 播放列表候选 URL |
 | `web/PlaylistStore.kt` | 直播源管理模式（内置 / 自定义 / 粘贴） |
 | `web/BootPrefs.kt` | 开机自启开关 |
@@ -117,7 +124,8 @@ PlayerManager (object)
 
 ### 直播源加载优先级
 1. `BuildConfig.PLAYLIST_URL`（远程 URL，在 `app/build.gradle.kts` 中配置）
-2. `LocalAdminServer` 候选 URL（`http://<ip>:5220/channels.m3u`、`/playlist`，再回退 `127.0.0.1`）
+2. `LocalAdminServer` 候选 URL（`http://<ip>:5221/channels.m3u`、`/playlist`，再回退 `127.0.0.1`）——**ysp 分支不再使用**；
+   频道改由 `EnginePlaylistSource` 拉 `http://127.0.0.1:8767/all.m3u`。
 3. 回退到本地 `assets/channels.m3u`
 
 ### 监控机制
@@ -194,4 +202,4 @@ adb uninstall com.tivimatelite
 - `TODO_HANDOFF.txt` 是旧交接文件（历史，内容已过时，以本文件与 README 为准）
 - **PowerShell 中 `$pid` 是只读自动变量**，永远不能赋值，用 `$currentProcId` 代替
 - 修改 `app/build.gradle.kts` 中的 `PLAYLIST_URL` 来切换远程直播源
-- Web 后台：`http://<盒子IP>:5220/`（日志实时刷新，2s 轮询）
+- Web 后台：`http://<盒子IP>:5221/`（日志实时刷新，2s 轮询）

@@ -1,312 +1,134 @@
-# TiviMateLite
+# YSP TV（ysp 分支）
 
-Android TV IPTV 播放器，面向晶晨 S905L3（2GB RAM、Android 9）等低端机顶盒。
-像素级致敬 TiviMate 的操作体验，目标常驻内存 ≤60MB、秒切台、不掉帧。
+**一个 APK，打开就能看央视频直播。** 不需要订阅地址、不需要电脑、不需要 Docker。
 
-> **播放内核：IJKPlayer**（debugly/ijkplayer k0.8.9 预编译 AAR，OpenGL ES 渲染后端，
-> 自带 `armeabi-v7a` / `arm64-v8a` 原生库）。不依赖 Vulkan，可在无 Vulkan 驱动的设备
-> （含 S905L3 机顶盒、MuMu 模拟器）上正常出画。
+本分支是 [TiviMateLite](../..) 的 **YSP 专用版**：把央视频直播引擎直接编进 App，
+启动时在本机 `127.0.0.1:8767` 起一个轻量网关，播放器从它取流。
+`main` 分支仍是原来的 M3U 播放器；两者包名不同，可同时安装。
+
+- 应用名：**YSP TV**
+- 包名：`com.tivimatelite.ysp`
+- 频道：**64 路**（央视 30 / 卫视 34），1080p 起播，可选高码率 / 4K
+- 最低系统：Android 8.0（minSdk 26），目标 Android 9 机顶盒
 
 ---
 
-## 功能特性
+## 功能
 
-| 特性 | 说明 |
+| 能力 | 说明 |
 |---|---|
-| 左右键切源 | 上下键换台；左右键在当前频道的多条线路间循环切换（300ms 防抖，悬浮显示"线路 x/N"） |
-| 智能线路记忆 | 播放成功记录域名，切台 / 故障转移时优先选记忆中可播放的源，失败自动移除 |
-| 多源自动故障转移 | 当前源出错 / 加载超时 / 缓冲超时 / 播放结束 → 依次尝试该频道其它源；单源频道退化为重试 |
-| 加载超时保护 | 15s 内未 READY → 自动切下一源 |
-| 缓冲超时 | BUFFERING 且播放中持续 35s → 切下一源 |
-| Ready-stall 监控 | READY 但位置与缓冲均停滞 300s → 切源（60s 预热 + 300s 恢复冷却） |
-| 上次播放记忆 | 重启后恢复上次频道及其线路 |
-| 音频增益（Web 可调） | Web 后台滑块调增益（1.00–3.00 倍，默认 1.60）：avfilter `volume + alimiter` 抬响度且不削波；保存即重播当前频道生效并持久化到 `audio_prefs` |
-| Web 后台 | NanoHTTPD（端口 5220）：切换内置/自定义源、增删源、粘贴源、音频增益、开机自启开关、实时日志 |
-| 文件日志持久化 | 写入 `cacheDir/tivimate_diag.txt`（512KB 上限），含未捕获异常处理器，ADB 断开后仍可拉取 |
-| 内存日志 | `AppLogStore` 环形缓冲 500 行，供 Web 后台实时查看 |
-| 网速悬浮层 | 每秒刷新实时下行速率 |
-| 心跳日志 | 每 10s 写一条 `HEARTBEAT`，用于判定进程存活 |
-| 开机自启 | `BootReceiver` + Web 后台开关 |
+| 本机直播引擎 | 纯 Java 内核（`:yspcore`），启动时自动拉起，无需外部服务 |
+| 64 路频道 | 央视、CGTN、卫视、CETV、国学等 |
+| 1080p / 高码率 | 默认 1080p；Web 后台可开高码率，4K/8K 频道按需升级 |
+| 快速换台 | 上下键换台，换台时左下角显示 **台名 + 序号** |
+| 左右键重连 | 单线路场景下，左右键立即重连当前频道（不再切换线路） |
+| 音频增益 | 1.00–3.00 倍，`volume + alimiter` 防削波，保存后自动重播生效 |
+| Web 控制台 | 端口 **5221**，四个页签：状态 / 流程 / 设置 / 日志 |
+| 处理流程可视化 | 请求 → 选源 → 上游取流 → 列表改写 → 输出 → 播放器，实时事件流 |
+| 日志 | App 日志与引擎日志合并，支持级别筛选、增量刷新、下载 |
+| 开机自启 | 沿用系统开关，自启时同时拉起引擎 |
+| 局域网共享 | 可选：把 `8767` 暴露给 TiviMate / PotPlayer 等外部播放器 |
 
----
+## 安装
 
-## 快速开始
-
-### 使用 GitHub Actions 构建
-
-1. 把项目推送到 GitHub 仓库。
-2. 打开仓库 `Actions` → 自动触发 `Android CI`。
-3. 等待任务完成后下载 `TiviMateLite-debug-apk` artifact。
-4. 解压得到 `app-debug.apk`。
-
-CI 配置（`.github/workflows/android.yml`）：JDK 17 + Gradle 8.10.2 + Android SDK platform 35 / build-tools 35.0.0。
-推送 `main` / `master` 或手动触发；构建 debug APK 并运行单元测试。
-
-本地构建（需 JDK 17）：
+从 GitHub Actions 的 `YSPTV-debug-apk` artifact 下载 `app-debug.apk`，
+或在本仓库 Releases 中获取（如已发布）。
 
 ```bash
-gradle assembleDebug --no-daemon --stacktrace
-# 产物：app/build/outputs/apk/debug/app-debug.apk
-```
-
-### 准备直播源
-
-默认从 asset 读取：
-
-```text
-app/src/main/assets/channels.m3u
-```
-
-也可改为远程源（`app/build.gradle.kts`）：
-
-```kotlin
-buildConfigField("String", "PLAYLIST_URL", "\"http://your-server/channels.m3u\"")
-```
-
-启动时的源加载优先级（见 `RemotePlaylistRepository.buildCandidateUrls()`）：
-
-1. `BuildConfig.PLAYLIST_URL`（若已配置）
-2. 本机 Web 后台候选：`http://<ip>:5220/channels.m3u`、`http://<ip>:5220/playlist`
-   （随后回退 `127.0.0.1` 的同一路径）——后台会按"内置 / 自定义源"模式返回生效播放列表
-3. asset 兜底：`app/src/main/assets/channels.m3u`
-
-示例：
-
-```m3u
-#EXTM3U
-#EXTINF:-1 tvg-name="CCTV 1" tvg-logo="https://example.com/logo.png" group-title="Test",CCTV 1
-http://example.com/live/cctv1.m3u8
-```
-
-> 同名频道会合并为一个"频道组"，其下多个 URL 即为可切换的"线路"。
-
-### 安装到机顶盒
-
-```bash
-adb connect BOX_IP:5555
 adb install -r app-debug.apk
-adb shell monkey -p com.tivimatelite 1
 ```
 
----
+桌面图标为「YSP TV」，深青色电视 + 播放键。
 
-## 按键映射
+## 使用
 
 | 按键 | 动作 |
 |---|---|
-| 上 / 下 | 换台（300ms 防抖） |
-| 左 / 右 | 切换当前频道线路（300ms 防抖，悬浮显示"线路 x/N"） |
-| 数字键 0-9 | 数字选台（最长 4 位，900ms 无输入后确认） |
-| MENU / SETTINGS / INFO | 切换后台诊断浮层（显示 IP / 后台地址 / 生效源，4s 自动隐藏） |
-| OK / ENTER | 已消费（无动作） |
+| 上 / 下 | 换台（显示台名与序号） |
+| 左 / 右 | 重连当前频道 |
+| 数字键 | 数字选台（最长 4 位，900ms 确认） |
+| MENU / INFO | 诊断浮层（引擎端口、控制台地址、当前线路） |
 
----
+启动页会等待引擎就绪（通常 <2s，最长 12s）；失败时显示原因与「重试」，
+并提示用浏览器打开 `设备IP:5221` 查看日志。
 
-## 核心架构
+## Web 控制台（5221）
 
 ```
-MainActivity（唯一 Activity）
-  ├─ dispatchKeyEvent：上下换台、左右切源、数字选台、MENU 切诊断浮层
-  ├─ SurfaceHolder.Callback → PlayerManager.setSurface(holder.surface)
-  │     （直接绑定 holder.surface，绕过 Amlogic phantom-surface bug）
-  ├─ PlayerManager.Events：onError→移除记忆域名并切下一源；
-  │     STATE_READY→取消超时/启动 ready-stall 监控/记录可播放域名
-  ├─ ChannelLoader：拉取→分组→按上次播放恢复选中
-  ├─ ChannelSwitcher：选源 + 多源故障转移
-  ├─ ReadyStallWatch：ready-stall / 网速 / 心跳 / 播放列表变更监听
-  └─ InputHandler：数字选台缓冲与防抖
-
-PlayerManager（object，全局单例 IjkMediaPlayer）
-  ├─ 懒构造 + 原生库加载失败永久置位（避免重试风暴）
-  ├─ play()：reset → applyOptions → setSurface → setDataSource → prepareAsync
-  └─ 状态机 IDLE / BUFFERING / READY / ENDED（由 IjkMediaPlayer 回调驱动）
-
-ChannelSwitcher
-  ├─ 频道切换（上下）与线路切换（左右）各自 300ms 防抖
-  ├─ 智能选源（记忆域名优先）
-  ├─ 15s 加载超时 / 35s 缓冲超时 / 单源重试（最多 3 次，间隔递增 5-15s）
-  └─ playNextSourceForCurrentChannel()：优先切到记忆中的好域名
-
-PlayableHostStore      （SharedPreferences `playable_hosts`）
-  └─ addHost / removeHost / getHosts / extractHost（记录可播放域名）
-
-PlaybackHistoryStore   （SharedPreferences `playback_history`）
-  └─ 记录上次频道名 / 线路索引 / URL，用于重启恢复
-
-PlaylistStore          （SharedPreferences `playlist_admin`）
-  └─ 内置/自定义源模式、自定义源增删选、粘贴源内容、配置指纹
-
-AudioGainPrefs         （SharedPreferences `audio_prefs`）
-  └─ 音频增益读写；范围与钳位复用 PlayerManager.clampAudioGain（单一真源）
-
-ReadyStallWatch
-  ├─ ready-stall 检测（READY 停滞 → 切源）
-  ├─ 播放列表变更监听（配置指纹变化 → 热重载）
-  ├─ 音频增益监听（轮询 audio_prefs，变化 → 通知重播当前频道）
-  ├─ 网速监控（每秒）
-  └─ 心跳（每 10s）
-
-LocalAdminServer / LocalAdminServerManager （NanoHTTPD, 端口 5220）
-  └─ Web 后台 + `/channels.m3u` 供本机回环拉取
-
-FileLogStore（cacheDir/tivimate_diag.txt）/ AppLogStore（内存 500 行环形缓冲）
+http://<设备IP>:5221/
 ```
 
-### 包结构（`com.tivimatelite`）
-
-| 文件 | 职责 |
+| 页签 | 内容 |
 |---|---|
-| `SplashActivity.kt` | 启动闪屏，约 900ms 后跳转 MainActivity |
-| `MainActivity.kt` | 唯一 Activity：按键分发、切台/切源、故障转移、ready-stall 监控 |
-| `BootReceiver.kt` | 开机自启广播（受 Web 后台开关控制） |
-| `model/Channel.kt` | 频道数据类（name, logoUrl, groupName, streamUrl, epgText） |
-| `parser/M3U8Parser.kt` | 流式 M3U8 解析器（`BufferedReader.lineSequence()` + Kotlin Flow） |
-| `player/PlayerManager.kt` | **全局单例 IJKPlayer 封装** + 播放选项 + 状态机 + 事件回调 |
-| `player/PlayableHostStore.kt` | 智能线路记忆（可播放域名集合） |
-| `player/PlaybackHistoryStore.kt` | 上次播放频道/线路持久化 |
-| `switcher/ChannelSwitcher.kt` | 选源、切台/切源防抖、多源故障转移、加载/缓冲超时 |
-| `monitor/ReadyStallWatch.kt` | ready-stall、网速、心跳、播放列表变更监听 |
-| `input/InputHandler.kt` | 数字选台缓冲（防抖 900ms）与悬浮层 |
-| `loader/ChannelLoader.kt` | 拉取 + 同名合并为频道组 + 恢复上次选中 |
-| `data/RemotePlaylistRepository.kt` | 远程/本机候选源探测与拉取 |
-| `ui/ChannelAdapter.kt` | RecyclerView 适配器（DiffUtil + Glide RGB_565） |
-| `util/HttpFetcher.kt` | HTTP 拉取工具 |
-| `web/LocalAdminServer.kt` | NanoHTTPD Web 后台（端口 5220） |
-| `web/LocalAdminServerManager.kt` | 后台生命周期与候选 URL |
-| `web/PlaylistStore.kt` | 直播源管理模式（内置 / 自定义 / 粘贴） |
-| `web/AudioGainPrefs.kt` | 音频增益持久化（SharedPreferences `audio_prefs`），供 Web 后台调节 |
-| `web/BootPrefs.kt` | 开机自启开关 |
-| `web/FileLogStore.kt` | 文件日志（`cacheDir/tivimate_diag.txt`）+ 未捕获异常处理器 |
-| `web/AppLogStore.kt` | 内存环形缓冲日志（500 行），供 Web 后台查看 |
+| 状态 | 引擎状态、端口、频道数、运行时长、内存、缓存、当前频道、设备会话 |
+| 流程 | 六段处理链路 + 最近事件流 + 当前频道 + 线路分布 |
+| 设置 | 高码率开关、仅 4K、缓存、并发、换台防抖、端口、局域网共享、日志级别、音频增益、开机自启 |
+| 日志 | App + 引擎合并日志，增量刷新，可筛选/清空/下载 |
 
-### 播放内核（IJKPlayer）选项
+> 标 `*` 的设置保存后会自动重启引擎。5221 绑定 `0.0.0.0`，仅建议在可信局域网使用。
 
-在 `PlayerManager.applyOptions()` 中设置（category：1=FORMAT, 2=CODEC, 4=PLAYER）：
+### HTTP API
 
-- **PLAYER**：`mediacodec` 与 `mediacodec-all-videos/-avc/-hevc/-mpeg2/-mpeg4` 硬解，
-  `mediacodec-handle-resolution-change`（分辨率切换），`framedrop`（丢帧策略），
-  `overlay-format=RV32`，`packet-buffering=0`（低延迟）
-- **FORMAT**：`user_agent=SYTV/1.6`，`probesize` / `analyzeduration`，
-  `reconnect=1`（自动重连）
-- **PLAYER（音频增益）**：`af=volume=<gain>,alimiter=limit=0.95:attack=5:release=50:level=0`
-  ——增益 >1.0 时挂载：`volume` 先整体抬电平，`alimiter` 再把峰值砖墙限幅在 0.95 防削波；
-  `gain<=1.0` 直通不挂滤镜（默认 1.60，范围 1.00–3.00，见 `buildAudioFilterChain()`）
-- **CODEC**：`skip_loop_filter=48`（解码加速）
-
-> 未在本 AAR 的 `libijkplayer.so` 中注册的选项会被 `av_opt_set_dict` 静默忽略，故代码中已剔除无效项。
-
-### 关键设计
-
-- **单 IJKPlayer 实例**：切台/切源只 `reset()` + 重新 `setDataSource` + `prepareAsync`，不重建播放器
-- **SurfaceView**：裸 `SurfaceView`（`setZOrderMediaOverlay(true)`），直接绑定 `holder.surface`，消除切台黑闪
-- **纯黑背景**：`#000000`，无动画过渡
-- **Glide**：强制 `override(64,64)` + `RGB_565`，列表静止时才加载台标
-- **硬解/原生库异常**：只记录日志不崩溃；原生库加载失败永久置位，避免重试风暴
-- **非削波音频增益**：增益走 avfilter `volume + alimiter` 链（而非直接放大 PCM），峰值被砖墙限幅在 0.95，避免爆音
-- **Ready-stall 兜底**：应对 HLS timeline 不连续导致 `currentPosition` 卡死
-
----
-
-## 调试命令
-
-### 基础检查
-
-```bash
-adb shell dumpsys meminfo com.tivimatelite
-adb shell top -o PID,CPU,RES,ARGS | grep tivimatelite
-adb logcat -s TiviMateLite
-```
-
-### 功能验证
-
-```bash
-# 应用日志统一走 tag `TiviMateLite`，消息内再带类名前缀；先按 tag 过滤再 findstr 关键字
-# 切源（左右键）
-adb logcat -s TiviMateLite | findstr "Manual source switch"
-
-# 加载超时
-adb logcat -s TiviMateLite | findstr "Load timeout"
-# → "MainActivity: Load timeout (15000ms), trying next source"
-
-# 线路记忆
-adb logcat -s TiviMateLite | findstr "playable hosts"
-# → "MainActivity: Removed failed host from playable hosts: http://..."
-
-# 音频增益（Web 后台保存后，链路顺序如下）
-adb logcat -s TiviMateLite | findstr "audioGain"
-# → "AudioGainPrefs: Audio gain set to 2.2"
-#   "PlayerManager: audioGain -> 2.2"
-#   "MainActivity: Audio gain -> 2.2, replaying current source"
-#   "PlayerManager: play url=... audioGain=2.2"
-
-# 设备端日志文件（ADB 断开后仍可用）
-adb shell cat /data/data/com.tivimatelite/cache/tivimate_diag.txt
-```
-
-### Web 后台
-
-在浏览器打开 `http://<盒子IP>:5220/`（避免 ADB，直接局域网访问）。
-经 ADB 转发时：
-
-```bash
-adb forward tcp:5220 tcp:5220
-# 然后访问 http://127.0.0.1:5220/
-```
-
-后台首页提供**音频增益**滑块（`POST /audio/gain`，字段 `gain`，范围 1.00–3.00）：
-
-- 保存后落盘 `audio_prefs`；`ReadyStallWatch` 约每 1.2s 轮询，检测到变化即重播当前频道使新增益生效
-  （IJK 的 `af` 选项只在 prepare 时读取，播放中不重播不生效）；未播放时于下次播放生效。
-- 越界值自动钳位（`>3.00→3.00`、`<1.00→1.00`）；非法/空输入被忽略并记一条 `audio/gain ignored` 警告。
-- 开机先应用持久化增益再首次 prepare，确保开机首个频道即带正确滤镜。
-
-### 长测与恢复
-
-```bash
-# ADB over TCP 约 3 分钟无活动断开，长测必开 keepalive
-powershell -c "while(1){sleep 5; adb shell echo alive > $null}"
-
-# 恢复命令
-adb shell am force-stop com.tivimatelite
-adb shell pm clear com.tivimatelite
-adb uninstall com.tivimatelite
-```
-
----
-
-## 构建约束
-
-- AGP 8.7.3 + Kotlin 2.0.21，Gradle 8.10.2
-- `compileSdk = 35`、`targetSdk = 28`（Android 9）、`minSdk = 24`
-- `abiFilters`：`armeabi-v7a` + `arm64-v8a`（IJKPlayer AAR 两种原生库均提供）
-- ViewBinding + BuildConfig 均已开启，JVM target 17
-
-### 主要依赖
-
-| 依赖 | 版本 | 用途 |
+| 方法 | 路径 | 说明 |
 |---|---|---|
-| `androidx.core:core-ktx` | 1.13.1 | Kotlin 扩展 |
-| `androidx.appcompat:appcompat` | 1.7.0 | AppCompat |
-| `ijkplayer-cmake-release.aar` | k0.8.9 | **播放内核**（本地 AAR） |
-| `androidx.recyclerview:recyclerview` | 1.3.2 | 频道列表 |
-| `org.jetbrains.kotlinx:kotlinx-coroutines-android` | 1.9.0 | 协程 |
-| `com.github.bumptech.glide:glide` | 4.16.0 | 台标加载 |
-| `org.nanohttpd:nanohttpd` | 2.3.1 | Web 后台 |
+| GET | `/api/status` | 引擎与当前频道状态 |
+| GET | `/api/channels` | 64 路频道状态 |
+| GET | `/api/events?after=<seq>` | 流程事件增量 |
+| GET | `/api/logs?after=<seq>&level=` | 日志增量 |
+| GET | `/diag` | 引擎逐频道诊断（代理 `8767/diag`） |
+| GET | `/all.m3u` | 代理引擎订阅（给外部播放器） |
+| POST | `/config` | 保存设置并重启 |
+| POST | `/engine/restart` `/engine/stop` `/engine/start` | 引擎控制 |
+| POST | `/audio/gain` `/boot/toggle` `/logs/clear` | 沿用 |
 
----
+## 架构
 
-## 已知问题
+```
+YSP TV (com.tivimatelite.ysp)
+├─ SplashActivity ──启动──> YspEngineService（前台服务）
+│                              └─ YspGateway（:yspcore 纯 Java）
+│                                   ├─ LocalServer :8767  /all.m3u  /<channel>.m3u8  /proxy.ts
+│                                   ├─ ChannelEngine（64 路、JCE/BK/设备协议）
+│                                   └─ TsSegmentCache / 日志总线
+├─ MainActivity（IJKPlayer + SurfaceView）
+│    └─ ChannelLoader ← http://127.0.0.1:8767/all.m3u（唯一频道来源）
+└─ LocalAdminServer :5221（NanoHTTPD，控制台）
+```
 
-- **HLS timeline 不连续**（部分 `fmt=ts2hls` 实时转码源）：`currentPosition` 卡住时，由 300s ready-stall 兜底切源
-- **单源频道**：所有源失败后按 5-15s 递增间隔重试，最多 3 次，之后放弃直到用户切台
-- **ADB over TCP 约 3 分钟无活动断开**：长测需后台 keepalive
-- **音频增益需重播生效**：IJK 的 `af` 仅在 prepare 时读取，播放中改增益会触发一次重播（伴随短暂 BUFFERING）
+- `:yspcore`：44 个 Java 文件、约 1.4 万行，零 Android 依赖；自带 262 个单元测试。
+- 数据目录：`Android/data/com.tivimatelite.ysp/files/ysp/`（设备身份、缓存状态）。
+- 默认参数：缓存 32MB、单设备并发 4、换台防抖 10s、高码率**关闭**（低端盒子优先稳定）。
 
----
+## 构建
 
-## 开发约定
+仓库包含 GitHub Actions 工作流（`.github/workflows/android.yml`），
+推送到 `ysp` 分支即构建 debug APK 并上传 artifact。
 
-- 仓库根目录 `要求.txt` 为原始架构需求文档（历史，播放内核已由该文档描述的 ExoPlayer 迁移为 IJKPlayer）
-- `AGENTS.md` 为面向 AI/开发者的精简指南
-- **PowerShell 中 `$pid` 为只读自动变量**，不可赋值，改用 `$currentProcId` 等
-- 修改 `app/build.gradle.kts` 中的 `PLAYLIST_URL` 切换远程直播源
+本地构建需要 JDK 17+ 与 Android SDK（`platforms;android-35`、`build-tools;35.0.0`）：
+
+```bash
+gradle assembleDebug --no-daemon
+# 产物：app/build/outputs/apk/debug/app-debug.apk
+```
+
+调试签名使用仓库内的 `app/ysp-debug.jks`（口令 `ysplive`），
+保证 CI 多次构建可覆盖安装；正式发布请替换为自己的 keystore。
+
+## 已知限制
+
+1. **依赖上游接口**：本项目复刻央视频客户端协议，上游改签名/风控会导致暂时不可用；
+   引擎内置 JCE 限流冷却与 SWR 旧列表兜底，但仍可能短暂黑屏。
+2. **CDN 速度**：部分时段央视频 CDN 对单连接限速明显，引擎已改为 256KB 并行 Range 取流；
+   网络极差时仍可能起播慢。
+3. **x86 模拟器**：MuMu 等 x86 环境强制 ffmpeg 软解；真机（ARM）使用硬解。
+4. **无 M3U 兜底**：本分支刻意不内置第三方源，引擎不可用时只显示诊断信息，不偷偷切源。
+5. **回看**：引擎支持 53 路 7 天时移，App 暂未提供回看时间选择 UI。
+6. **4K**：需要设备 HEVC 硬解与 ≥50Mbps 带宽；低端盒子建议保持高码率关闭。
+
+## 来源与声明
+
+- 内核移植自 [`ysp-live-android`](https://github.com/2909272751/ysp-live-android) 的 `core`，
+  其原创代码以 MIT 发布（见 `yspcore/LICENSE`）；协议常量与频道数据的权利归原作者。
+- 本项目与央视、央视频无任何关联，不存储、不分发视频内容，仅在本机转发公开接口。
+- 仅供技术学习与个人研究，请勿用于商业用途或公开传播；使用风险由使用者自行承担。
+- `main` 分支与 `ysp` 分支互不影响；本分支的改动不会自动合并回 `main`。
