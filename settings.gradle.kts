@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "TiviMateLite"
 include(":app")
+include(":yspcore")

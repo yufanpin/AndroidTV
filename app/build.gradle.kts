@@ -8,12 +8,13 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.tivimatelite"
-        // 播放内核（IJKPlayer AAR）minSdk 为 21；S905L3 设备为 Android 9，无碍。
-        minSdk = 24
+        // ysp 分支独立包名，可与 main 分支的 com.tivimatelite 共存
+        applicationId = "com.tivimatelite.ysp"
+        // 引擎内核使用 java.time / String.join（API 26）；目标机为 Android 9+
+        minSdk = 26
         targetSdk = 28
         versionCode = 1
-        versionName = "1.0"
+        versionName = "ysp-1.0.0"
         buildConfigField("String", "PLAYLIST_URL", "\"\"")
 
         ndk {
@@ -39,6 +40,8 @@ android {
 }
 
 dependencies {
+    implementation(project(":yspcore"))
+
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
 
