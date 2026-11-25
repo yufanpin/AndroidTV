@@ -518,6 +518,6 @@ class MainActivity : AppCompatActivity() {
         private const val BACKEND_INFO_AUTO_HIDE_MS = 4000L
         private const val READY_STALL_WARMUP_MS = 60000L
         private const val ENGINE_WAIT_TIMEOUT_MS = 25000L
-        private const val CHANNEL_NAME_HIDE_MS = 1800L
+        private const val CHANNEL_NAME_HIDE_MS = 1500L
     }
 }

@@ -24,7 +24,7 @@ object YspLogBridge {
                 }
                 YspEvents.recordCore(entry)
             }
-            Log.setConsoleEnabled(true)
+            Log.setConsoleEnabled(false)
         }
     }
 }

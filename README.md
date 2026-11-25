@@ -125,6 +125,20 @@ gradle assembleDebug --no-daemon
 5. **回看**：引擎支持 53 路 7 天时移，App 暂未提供回看时间选择 UI。
 6. **4K**：需要设备 HEVC 硬解与 ≥50Mbps 带宽；低端盒子建议保持高码率关闭。
 
+## 验证情况（2026-11-26）
+
+在 MuMu Player（Android 12 / x86_64 / Houdini ARM 转译，强制软解）上实测：
+
+- 启动后加载 **64 路频道**，`/api/status` 返回 64；
+- CCTV-1、CCTV-2 均成功出画（1920×1080），换台后自动重连；
+- 上下键换台时左下角显示 **台名 + 序号**；左右键显示「重连当前频道」并立即重播；
+- 5221 控制台四个页签可访问，`/api/status`、`/api/events`、`/api/logs` 正常；
+- 高码率开关保存后引擎自动重启，`highBitrate` 由 false 变 true，再关闭可恢复；
+- `yspcore` 255 项单元测试 + `app` 43 项单元测试通过。
+
+> 受当前网络到央视频 CDN 的限速影响，模拟器冷启动首播可能需要 30–60 秒
+> （引擎会持续重试并最终出画）；真实机顶盒使用硬解且网络路径不同，通常明显更快。
+
 ## 来源与声明
 
 - 内核移植自 [`ysp-live-android`](https://github.com/2909272751/ysp-live-android) 的 `core`，
