@@ -11,10 +11,10 @@ import java.util.Random;
  */
 public final class ApiFlowLimiter {
 
-    /** 默认最小间隔（毫秒）。 */
-    public static final long DEFAULT_MIN_INTERVAL_MS = 700L;
+    /** 默认最小间隔（毫秒）。ysp 分支放宽，避免连续切台触发上游限流。 */
+    public static final long DEFAULT_MIN_INTERVAL_MS = 1200L;
     /** 默认抖动上界（毫秒）。 */
-    public static final long DEFAULT_JITTER_MS = 250L;
+    public static final long DEFAULT_JITTER_MS = 400L;
 
     private final long minIntervalMs;
     private final long jitterMs;

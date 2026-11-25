@@ -24,6 +24,27 @@ android {
         }
     }
 
+    signingConfigs {
+        // 固定调试签名：CI 每次构建使用同一证书，升级安装不会报 signature mismatch。
+        // 仅用于侧载测试，正式发布请替换为自己的 release keystore。
+        getByName("debug") {
+            storeFile = file("ysp-debug.jks")
+            storePassword = "ysplive"
+            keyAlias = "ysplive"
+            keyPassword = "ysplive"
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
     buildFeatures {
         viewBinding = true
         buildConfig = true

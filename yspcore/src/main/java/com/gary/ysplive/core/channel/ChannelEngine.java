@@ -38,7 +38,7 @@ public final class ChannelEngine {
     private static final String TAG = "engine";
 
     /** 刷新间隔（秒），Python {@code REFRESH_INTERVAL}。 */
-    public static final int REFRESH_INTERVAL = 10;
+    public static final int REFRESH_INTERVAL = 15;
     /** 空闲多少秒后停止后台拉流，Python {@code IDLE_TIMEOUT}。 */
     public static final int IDLE_TIMEOUT = 120;
     /** 设备链接空闲回收窗口（秒），Python {@code LINK_IDLE_TIMEOUT}。 */
@@ -49,10 +49,10 @@ public final class ChannelEngine {
     public static final int MAX_SEGS = 120;
     /** bkliveinfo 地址缓存 TTL（秒），Python {@code BK_URL_TTL}。 */
     public static final int BK_URL_TTL = 300;
-    /** SWR 缓存窗口（秒）：Python 里是硬编码的 15.0。 */
-    public static final double SWR_TTL_SEC = 15.0;
-    /** 超过这个年龄就顺手触发后台刷新（Python 是 6.0）。 */
-    public static final double SWR_REFRESH_AFTER_SEC = 6.0;
+    /** SWR 缓存窗口（秒）。ysp 分支放宽到 90s：上游限流时用旧列表顶住，避免直接 503。 */
+    public static final double SWR_TTL_SEC = 90.0;
+    /** 超过这个年龄就顺手触发后台刷新。 */
+    public static final double SWR_REFRESH_AFTER_SEC = 15.0;
     /**
      * 同一频道两次"bk 候选 CDN 轮换"的最小间隔（秒）。
      * <p>限流目的：真死的频道不能被打成无限重试；而正常的坏 CDN 一次轮换后就能恢复。
@@ -60,6 +60,8 @@ public final class ChannelEngine {
     public static final double BK_ROTATE_MIN_INTERVAL_SEC = 20.0;
     /** bk 候选探活时检查多少个分片（分片可用性按片变化，只探首片会误杀）。 */
     private static final int PROBE_SEG_COUNT = 3;
+    /** JCE 触发“操作过于频繁”后的全局冷却时间。 */
+    private static final long JCE_RATE_LIMIT_COOLDOWN_MS = 20_000L;
 
     /** 一次 m3u8 响应的完整信息（供 HTTP 层直接写 socket）。 */
     public static final class PlaylistResult {
@@ -126,6 +128,9 @@ public final class ChannelEngine {
     private final Object inflightLock = new Object();
 
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
+    /** 全局 JCE 限流冷却截止时间（毫秒）。 */
+    private final java.util.concurrent.atomic.AtomicLong jceCooldownUntilMs =
+            new java.util.concurrent.atomic.AtomicLong(0L);
     private final long startedAtMs = System.currentTimeMillis();
     private volatile Boolean resolverReadyOverride;
     private volatile UpstreamHook upstreamHook;
@@ -418,11 +423,27 @@ public final class ChannelEngine {
 
     /** 真实网络路径：限速 → 换时移地址 → 拉播放列表。 */
     private String jceFetchReal(Channel ch) throws Exception {
+        long nowMs = System.currentTimeMillis();
+        long cooldownUntil = jceCooldownUntilMs.get();
+        if (nowMs < cooldownUntil) {
+            throw new IOException("JCE 限流冷却中，剩余 " + ((cooldownUntil - nowMs) / 1000) + "s");
+        }
         flowLimiter.waitSlot();
-        long now = System.currentTimeMillis() / 1000L;
-        String m3u8Url = Upstream.jceTimeshiftUrl(
-                ch.pid(), ch.sid(), now - WINDOW, now, ch.defn());
-        return Upstream.fetchJcePlaylist(m3u8Url);
+        long now = nowMs / 1000L;
+        try {
+            String m3u8Url = Upstream.jceTimeshiftUrl(
+                    ch.pid(), ch.sid(), now - WINDOW, now, ch.defn());
+            return Upstream.fetchJcePlaylist(m3u8Url);
+        } catch (IllegalArgumentException e) {
+            String message = e.getMessage();
+            if (message != null && (message.contains("频繁") || message.contains("35005"))) {
+                // 全局冷却：避免多个频道在限流窗口里互相踩踏
+                jceCooldownUntilMs.set(System.currentTimeMillis() + JCE_RATE_LIMIT_COOLDOWN_MS);
+                Log.i(TAG, "[" + ch.slug() + "] JCE 触发限流，全局冷却 "
+                        + (JCE_RATE_LIMIT_COOLDOWN_MS / 1000) + "s", 10.0);
+            }
+            throw e;
+        }
     }
 
     /** 把 JCE 播放列表文本解析成分片序列（相对地址已在上游被 join 成绝对地址）。 */

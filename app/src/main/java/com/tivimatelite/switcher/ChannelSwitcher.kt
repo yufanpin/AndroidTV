@@ -201,6 +201,25 @@ class ChannelSwitcher(
         retryCurrentSingleSource("all_sources_failed")
     }
 
+    /** 用户主动重连：立即重播当前频道，并重置自动重试预算。 */
+    fun reconnectCurrentNow(reason: String) {
+        val channelGroups = getChannelGroups()
+        val currentChannelIndex = getCurrentChannelIndex()
+        if (currentChannelIndex !in channelGroups.indices) return
+        resetRetryState()
+        attemptedSourceIndexes.clear()
+        hlsRetriedSourceIndexes.clear()
+        setCurrentSourceIndex(0)
+        logWarning("Manual reconnect for ${channelGroups[currentChannelIndex].name}, reason=$reason")
+        playCurrentSource(resetAttempts = true)
+    }
+
+    /** 播放成功后重置重试预算，下一次故障仍可自动重连。 */
+    fun resetRetryState() {
+        singleSourceRetryCount = 0
+        lastSingleSourceRetryAtMs = 0L
+    }
+
     fun retryCurrentSingleSource(reason: String) {
         val channelGroups = getChannelGroups()
         val currentChannelIndex = getCurrentChannelIndex()
@@ -240,7 +259,7 @@ class ChannelSwitcher(
         bufferingFailoverJob = scope.launch {
             delay(BUFFERING_FAILOVER_MS)
             if (isPlayerBufferingAndPlaying()) {
-                playNextSourceForCurrentChannel("buffer_timeout")
+                retryCurrentSingleSource("buffer_timeout")
             }
         }
     }
@@ -314,11 +333,11 @@ class ChannelSwitcher(
         private const val CHANNEL_ZAP_DEBOUNCE_MS = 300L
         private const val SOURCE_SWITCH_DEBOUNCE_MS = 300L
         private const val BUFFERING_FAILOVER_MS = 35000L
-        private const val SINGLE_SOURCE_RETRY_BASE_MS = 5000L
-        private const val SINGLE_SOURCE_RETRY_MAX_MS = 15000L
-        private const val SINGLE_SOURCE_RETRY_MIN_GAP_MS = 12000L
-        private const val SINGLE_SOURCE_RETRY_MAX_COUNT = 3
+        private const val SINGLE_SOURCE_RETRY_BASE_MS = 6000L
+        private const val SINGLE_SOURCE_RETRY_MAX_MS = 30000L
+        private const val SINGLE_SOURCE_RETRY_MIN_GAP_MS = 10000L
+        private const val SINGLE_SOURCE_RETRY_MAX_COUNT = 5
         // P2: 15s 初始加载超时
-        private const val CHANNEL_LOAD_TIMEOUT_MS = 15000L
+        private const val CHANNEL_LOAD_TIMEOUT_MS = 25000L
     }
 }

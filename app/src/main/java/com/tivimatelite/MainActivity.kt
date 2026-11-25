@@ -71,8 +71,9 @@ class MainActivity : AppCompatActivity() {
                 PlayableHostStore.removeHost(this@MainActivity, currentUrl)
                 AppLogStore.i(TAG, "Removed failed host from playable hosts: $currentUrl")
             }
-            AppLogStore.w(TAG, "Playback error, trying next source")
-            channelSwitcher.playNextSourceForCurrentChannel("player_error")
+            AppLogStore.w(TAG, "Playback error, retrying current channel")
+            // ysp 只有一条线路：出错只重连当前频道，绝不跳到下一个台
+            channelSwitcher.retryCurrentSingleSource("player_error")
         }
 
         override fun onStateChanged(state: PlayerManager.PlaybackState) {
@@ -85,6 +86,7 @@ class MainActivity : AppCompatActivity() {
                 PlayerManager.PlaybackState.READY -> {
                     channelSwitcher.cancelBufferingFailover()
                     channelSwitcher.cancelLoadTimeout()
+                    channelSwitcher.resetRetryState()
                     startReadyStallWatch()
                     binding.engineStatusText.visibility = View.GONE
                     YspEvents.record(currentChannelName(), YspEvents.STAGE_PLAYER, "播放器 READY")
@@ -96,7 +98,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 PlayerManager.PlaybackState.ENDED -> {
                     cancelReadyStallWatch()
-                    channelSwitcher.playNextSourceForCurrentChannel("state_ended")
+                    channelSwitcher.retryCurrentSingleSource("state_ended")
                 }
                 PlayerManager.PlaybackState.IDLE -> {}
             }
@@ -198,7 +200,7 @@ class MainActivity : AppCompatActivity() {
             },
             onReadyStallDetected = { reason ->
                 lastReadyStallRecoveryAtMs = System.currentTimeMillis()
-                channelSwitcher.playNextSourceForCurrentChannel(reason)
+                channelSwitcher.retryCurrentSingleSource(reason)
             },
             onSpeedText = { text -> binding.netSpeedText.text = text },
             onHeartbeat = { message -> FileLogStore.i(TAG, message) },
@@ -244,7 +246,7 @@ class MainActivity : AppCompatActivity() {
                 AppLogStore.i(TAG, "User reconnect current channel")
                 FileLogStore.i(TAG, "User reconnect current channel")
                 showReconnectBadge()
-                channelSwitcher.retryCurrentSingleSource("user_reconnect")
+                channelSwitcher.reconnectCurrentNow("user_reconnect")
                 true
             }
             KeyEvent.KEYCODE_DPAD_CENTER,
