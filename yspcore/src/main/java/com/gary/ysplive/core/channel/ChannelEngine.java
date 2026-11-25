@@ -661,6 +661,26 @@ public final class ChannelEngine {
     }
 
     /**
+     * 切台时停掉旧频道的后台刷新，避免它继续消耗上游限流配额，
+     * 把新频道的首次请求挤进“操作过于频繁”。
+     */
+    public void stopChannel(String slug) {
+        Channel ch = channelFor(slug);
+        if (ch == null) return;
+        Thread thread = ch.thread();
+        if (thread != null) {
+            thread.interrupt();
+        }
+        ch.setThread(null);
+        ch.setStarting(false);
+        ch.setLastAccess(0);
+        synchronized (ch.lock()) {
+            ch.clearBuffer();
+        }
+        Log.i(TAG, "[" + slug + "] 已停止后台刷新（切台）", 5.0);
+    }
+
+    /**
      * 确保频道有后台拉流线程与可用的分片。等价于 Python {@code ensure_channel}。
      */
     public void ensureChannel(Channel ch) {

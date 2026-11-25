@@ -213,7 +213,11 @@ class MainActivity : AppCompatActivity() {
         inputHandler = InputHandler(
             scope = scope,
             channelCountProvider = { channelGroups.size },
-            onChannelRequest = { targetIndex -> channelSwitcher.switchChannelImmediately(targetIndex) },
+            onChannelRequest = { targetIndex ->
+                val oldSlug = currentChannelSlug()
+                channelSwitcher.switchChannelImmediately(targetIndex)
+                oldSlug?.let { YspEngine.stopChannel(it) }
+            },
             channelNumberText = binding.channelNumberText
         )
 
@@ -438,7 +442,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestSwitchByDelta(delta: Int) {
+        val oldSlug = currentChannelSlug()
         channelSwitcher.requestSwitchByDelta(delta)
+        oldSlug?.let { YspEngine.stopChannel(it) }
+    }
+
+    private fun currentChannelSlug(): String? {
+        val url = channelGroups.getOrNull(currentChannelIndex)?.sources?.firstOrNull() ?: return null
+        return url.substringAfterLast('/').substringBefore(".m3u8").takeIf { it.isNotEmpty() }
     }
 
     private fun startReadyStallWatch() {

@@ -164,6 +164,11 @@ object YspEngine {
 
     fun lastError(): String = lastStartError
 
+    fun stopChannel(slug: String) {
+        val engine = (gateway as? YspGateway)?.engine() ?: return
+        runCatching { engine.stopChannel(slug) }
+    }
+
     fun channels(): List<ChannelInfo> {
         val engine = (gateway as? YspGateway)?.engine() ?: return emptyList()
         return runCatching {
