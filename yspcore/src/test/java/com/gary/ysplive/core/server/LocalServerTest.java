@@ -143,17 +143,40 @@ public class LocalServerTest {
                     OutputStream out = c.getOutputStream();
                     if (range != null) {
                         lastRangeHeaderSeen = 1;
-                        int bytes = payload.length / 2;
+                        int start = 0;
+                        int end = payload.length - 1;
+                        String spec = range.replace("bytes=", "").trim();
+                        String[] parts = spec.split("-", -1);
+                        try {
+                            if (!parts[0].isEmpty()) start = Integer.parseInt(parts[0]);
+                            if (parts.length > 1 && !parts[1].isEmpty()) {
+                                end = Integer.parseInt(parts[1]);
+                            }
+                        } catch (NumberFormatException ignored) {
+                            start = 0;
+                            end = payload.length - 1;
+                        }
+                        start = Math.max(0, Math.min(start, payload.length));
+                        end = Math.max(-1, Math.min(end, payload.length - 1));
+                        if (start >= payload.length || end < start) {
+                            out.write(("HTTP/1.1 416 Range Not Satisfiable\r\n" +
+                                    "Content-Range: bytes */" + payload.length +
+                                    "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                                    .getBytes(StandardCharsets.UTF_8));
+                            out.flush();
+                            continue;
+                        }
+                        int bytes = end - start + 1;
                         StringBuilder sb = new StringBuilder();
                         sb.append("HTTP/1.1 206 Partial Content\r\n");
                         sb.append("Content-Type: video/mp2t\r\n");
-                        sb.append("Content-Range: bytes 0-").append(bytes - 1)
-                                .append('/').append(payload.length).append("\r\n");
+                        sb.append("Content-Range: bytes ").append(start).append('-')
+                                .append(end).append('/').append(payload.length).append("\r\n");
                         sb.append("Accept-Ranges: bytes\r\n");
                         sb.append("Content-Length: ").append(bytes).append("\r\n");
                         sb.append("Connection: close\r\n\r\n");
                         out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
-                        out.write(payload, 0, bytes);
+                        out.write(payload, start, bytes);
                     } else {
                         StringBuilder sb = new StringBuilder();
                         sb.append("HTTP/1.1 200 OK\r\n");
