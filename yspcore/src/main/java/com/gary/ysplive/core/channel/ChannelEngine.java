@@ -1005,6 +1005,130 @@ public final class ChannelEngine {
 
     // ------------------------------------------------------------------ 分片代理
 
+    /**
+     * 并行分块拉取一个分片。
+     * <p>实测央视频 CDN 对单连接串行下载会限速（~50KB/s），但 6 路 256KB Range
+     * 并发可以跑满带宽；这里并发取齐后一次性交给播放器，2MB 分片约 0.2s。
+     */
+    private byte[] fetchSegmentParallel(String url, Map<String, String> baseHeaders)
+            throws IOException {
+        final int chunk = 256 * 1024;
+        Map<String, String> firstHeaders = new LinkedHashMap<>(baseHeaders);
+        firstHeaders.put("Range", "bytes=0-" + (chunk - 1));
+        HttpURLConnection first = Upstream.openStream(url, firstHeaders, 15000);
+        int status;
+        try {
+            status = first.getResponseCode();
+        } catch (IOException e) {
+            first.disconnect();
+            throw e;
+        }
+        if (status == 200) {
+            try {
+                return readAll(first.getInputStream());
+            } finally {
+                first.disconnect();
+            }
+        }
+        if (status != 206) {
+            first.disconnect();
+            throw new IOException("upstream HTTP " + status);
+        }
+        long total = parseContentRangeTotal(first.getHeaderField("Content-Range"));
+        byte[] head;
+        try {
+            head = readAll(first.getInputStream());
+        } finally {
+            first.disconnect();
+        }
+        if (total <= 0 || total > 35L * 1024 * 1024) {
+            return head;
+        }
+        int count = (int) ((total + chunk - 1) / chunk);
+        if (count <= 1) {
+            return head;
+        }
+        byte[][] parts = new byte[count][];
+        parts[0] = head;
+        java.util.concurrent.ExecutorService pool =
+                java.util.concurrent.Executors.newFixedThreadPool(Math.min(6, count - 1));
+        List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+        try {
+            for (int i = 1; i < count; i++) {
+                final int index = i;
+                final long start = (long) i * chunk;
+                final long end = Math.min(total, start + chunk) - 1;
+                futures.add(pool.submit(() -> {
+                    parts[index] = fetchRange(url, baseHeaders, start, end);
+                    return null;
+                }));
+            }
+            for (java.util.concurrent.Future<?> future : futures) {
+                future.get(20, java.util.concurrent.TimeUnit.SECONDS);
+            }
+        } catch (Exception e) {
+            throw new IOException("parallel segment fetch failed: " + e.getMessage(), e);
+        } finally {
+            pool.shutdownNow();
+        }
+        byte[] out = new byte[(int) total];
+        int pos = 0;
+        for (byte[] part : parts) {
+            if (part == null) throw new IOException("segment chunk missing");
+            System.arraycopy(part, 0, out, pos, part.length);
+            pos += part.length;
+        }
+        return out;
+    }
+
+    private byte[] fetchRange(String url, Map<String, String> baseHeaders, long start, long end)
+            throws IOException {
+        IOException last = null;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            Map<String, String> headers = new LinkedHashMap<>(baseHeaders);
+            headers.put("Range", "bytes=" + start + "-" + end);
+            HttpURLConnection conn = Upstream.openStream(url, headers, 15000);
+            try {
+                int status = conn.getResponseCode();
+                if (status != 206 && status != 200) {
+                    throw new IOException("chunk HTTP " + status);
+                }
+                byte[] data = readAll(conn.getInputStream());
+                long expected = end - start + 1;
+                if (data.length != expected) {
+                    throw new IOException("short chunk " + data.length + "/" + expected);
+                }
+                return data;
+            } catch (IOException e) {
+                last = e;
+            } finally {
+                conn.disconnect();
+            }
+        }
+        throw last == null ? new IOException("chunk fetch failed") : last;
+    }
+
+    private static long parseContentRangeTotal(String contentRange) {
+        if (contentRange == null) return -1L;
+        int slash = contentRange.lastIndexOf('/');
+        if (slash < 0 || slash + 1 >= contentRange.length()) return -1L;
+        try {
+            return Long.parseLong(contentRange.substring(slash + 1).trim());
+        } catch (NumberFormatException e) {
+            return -1L;
+        }
+    }
+
+    private static byte[] readAll(InputStream in) throws IOException {
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream(256 * 1024);
+        byte[] buf = new byte[64 * 1024];
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            bos.write(buf, 0, n);
+        }
+        return bos.toByteArray();
+    }
+
     /** 流式分片：不整体入内存，直接边下边发给播放器。 */
     public static final class SegmentStream implements java.io.Closeable {
         public final int status;
@@ -1039,126 +1163,6 @@ public final class ChannelEngine {
     }
 
     /**
-     * 按 256KB Range 分块拉取的上游流。
-     * <p>部分 CDN（如央视频 tlivecloud-playback-cdn）对完整 GET 会限速到 ~50KB/s，
-     * 但 256KB Range 请求可以跑满带宽；分块串行取流能把 1080p 分片的起播时间从
-     * 30s+ 压到 2s 左右。
-     */
-    static final class ChunkedSegmentInput extends InputStream {
-        private static final int CHUNK = 256 * 1024;
-        private final String url;
-        private final Map<String, String> baseHeaders;
-        private HttpURLConnection connection;
-        private InputStream current;
-        private long total = -1L;
-        private long pos = 0L;
-        private boolean first = true;
-        String contentType;
-        long totalLength = -1L;
-
-        ChunkedSegmentInput(String url, Map<String, String> baseHeaders) {
-            this.url = url;
-            this.baseHeaders = baseHeaders;
-        }
-
-        void openFirst() throws IOException {
-            openNext();
-        }
-
-        private void openNext() throws IOException {
-            long start = pos;
-            Map<String, String> headers = new LinkedHashMap<>(baseHeaders);
-            headers.put("Range", "bytes=" + start + "-" + (start + CHUNK - 1));
-            HttpURLConnection conn = Upstream.openStream(url, headers, 20000);
-            int status;
-            try {
-                status = conn.getResponseCode();
-            } catch (IOException e) {
-                conn.disconnect();
-                throw e;
-            }
-            if (status == 200) {
-                total = conn.getContentLengthLong();
-                current = conn.getInputStream();
-                connection = conn;
-                first = false;
-                return;
-            }
-            if (status == 416) {
-                // 已经读到文件末尾
-                total = pos;
-                conn.disconnect();
-                current = null;
-                connection = null;
-                return;
-            }
-            if (status != 206) {
-                conn.disconnect();
-                throw new IOException("upstream HTTP " + status);
-            }
-            if (first) {
-                String contentRange = conn.getHeaderField("Content-Range");
-                total = parseTotal(contentRange);
-                contentType = conn.getContentType();
-                totalLength = total;
-                first = false;
-            }
-            current = conn.getInputStream();
-            connection = conn;
-        }
-
-        private static long parseTotal(String contentRange) {
-            if (contentRange == null) return -1L;
-            int slash = contentRange.lastIndexOf('/');
-            if (slash < 0 || slash + 1 >= contentRange.length()) return -1L;
-            try {
-                return Long.parseLong(contentRange.substring(slash + 1).trim());
-            } catch (NumberFormatException e) {
-                return -1L;
-            }
-        }
-
-        @Override
-        public int read() throws IOException {
-            byte[] one = new byte[1];
-            int n = read(one, 0, 1);
-            return n <= 0 ? -1 : one[0] & 0xFF;
-        }
-
-        @Override
-        public int read(byte[] b, int off, int len) throws IOException {
-            while (true) {
-                if (current == null) {
-                    if (total >= 0 && pos >= total) return -1;
-                    openNext();
-                }
-                int n = current.read(b, off, len);
-                if (n > 0) {
-                    pos += n;
-                    return n;
-                }
-                closeCurrent();
-                if (total >= 0 && pos >= total) return -1;
-            }
-        }
-
-        private void closeCurrent() {
-            try {
-                if (current != null) current.close();
-            } catch (IOException ignored) {
-            }
-            if (connection != null) connection.disconnect();
-            current = null;
-            connection = null;
-        }
-
-        @Override
-        public void close() {
-            closeCurrent();
-        }
-    }
-
-    /**
      * 打开一个分片的上游流。与 {@link #fetchSegmentEx} 的区别是不缓存、不整片读入内存，
      * 适合 2MB 级别的 1080p 分片和低内存设备。
      */
@@ -1186,15 +1190,12 @@ public final class ChannelEngine {
         Map<String, String> headers = Upstream.playbackRequestHeaders(playbackHeaders, extra);
         boolean noRange = rangeHeader == null || rangeHeader.trim().isEmpty();
         if (noRange) {
-            ChunkedSegmentInput chunked = new ChunkedSegmentInput(realUrl, headers);
-            chunked.openFirst();
+            byte[] data = fetchSegmentParallel(realUrl, headers);
             Map<String, String> outHeaders = new LinkedHashMap<>();
-            outHeaders.put("Content-Type",
-                    chunked.contentType == null ? "video/mp2t" : chunked.contentType);
-            if (chunked.totalLength > 0) {
-                outHeaders.put("Content-Length", String.valueOf(chunked.totalLength));
-            }
-            return new SegmentStream(null, chunked, 200, outHeaders, chunked.totalLength);
+            outHeaders.put("Content-Type", "video/mp2t");
+            outHeaders.put("Content-Length", String.valueOf(data.length));
+            return new SegmentStream(null, new java.io.ByteArrayInputStream(data), 200,
+                    outHeaders, data.length);
         }
         HttpURLConnection connection = Upstream.openStream(realUrl, headers, 25000);
         int status;
