@@ -1006,83 +1006,113 @@ public final class ChannelEngine {
     // ------------------------------------------------------------------ 分片代理
 
     /**
-     * 并行分块拉取一个分片。
-     * <p>实测央视频 CDN 对单连接串行下载会限速（~50KB/s），但 6 路 256KB Range
-     * 并发可以跑满带宽；这里并发取齐后一次性交给播放器，2MB 分片约 0.2s。
+     * 并行分块的顺序流：先同步取第一块拿到总长度并立刻回响应头，
+     * 其余 256KB 块并行预取，按顺序吐给播放器。
+     * <p>央视频 CDN 单连接串行下载会限速到 ~50KB/s，但 6 路并行 Range 可以跑满带宽。
      */
-    private byte[] fetchSegmentParallel(String url, Map<String, String> baseHeaders)
-            throws IOException {
-        final int chunk = 256 * 1024;
-        Map<String, String> firstHeaders = new LinkedHashMap<>(baseHeaders);
-        firstHeaders.put("Range", "bytes=0-" + (chunk - 1));
-        HttpURLConnection first = Upstream.openStream(url, firstHeaders, 15000);
-        int status;
-        try {
-            status = first.getResponseCode();
-        } catch (IOException e) {
-            first.disconnect();
-            throw e;
+    static final class ParallelSegmentInput extends InputStream {
+        private static final int CHUNK = 256 * 1024;
+        private final String url;
+        private final Map<String, String> baseHeaders;
+        private final java.util.concurrent.ExecutorService pool =
+                java.util.concurrent.Executors.newFixedThreadPool(6);
+        private final Map<Integer, java.util.concurrent.Future<byte[]>> futures =
+                new java.util.HashMap<>();
+        private byte[] current;
+        private int offset;
+        private int index;
+        private int count;
+        String contentType;
+        long totalLength = -1L;
+
+        ParallelSegmentInput(String url, Map<String, String> baseHeaders) {
+            this.url = url;
+            this.baseHeaders = baseHeaders;
         }
-        if (status == 200) {
+
+        void start() throws IOException {
+            Map<String, String> headers = new LinkedHashMap<>(baseHeaders);
+            headers.put("Range", "bytes=0-" + (CHUNK - 1));
+            HttpURLConnection conn = Upstream.openStream(url, headers, 15000);
             try {
-                return readAll(first.getInputStream());
+                int status = conn.getResponseCode();
+                if (status == 200) {
+                    current = readAll(conn.getInputStream());
+                    totalLength = current.length;
+                    count = 1;
+                    return;
+                }
+                if (status != 206) {
+                    throw new IOException("upstream HTTP " + status);
+                }
+                String contentRange = conn.getHeaderField("Content-Range");
+                long total = parseContentRangeTotal(contentRange);
+                if (total <= 0 || total > 35L * 1024 * 1024) {
+                    current = readAll(conn.getInputStream());
+                    totalLength = current.length;
+                    count = 1;
+                    return;
+                }
+                current = readAll(conn.getInputStream());
+                totalLength = total;
+                count = (int) ((total + CHUNK - 1) / CHUNK);
+                contentType = conn.getContentType();
+                for (int i = 1; i < count; i++) {
+                    final int idx = i;
+                    final long start = (long) i * CHUNK;
+                    final long end = Math.min(total, start + CHUNK) - 1;
+                    futures.put(idx, pool.submit(() -> fetchChunk(url, baseHeaders, start, end)));
+                }
             } finally {
-                first.disconnect();
+                conn.disconnect();
             }
         }
-        if (status != 206) {
-            first.disconnect();
-            throw new IOException("upstream HTTP " + status);
+
+        @Override
+        public int read() throws IOException {
+            byte[] one = new byte[1];
+            int n = read(one, 0, 1);
+            return n <= 0 ? -1 : one[0] & 0xFF;
         }
-        long total = parseContentRangeTotal(first.getHeaderField("Content-Range"));
-        byte[] head;
-        try {
-            head = readAll(first.getInputStream());
-        } finally {
-            first.disconnect();
-        }
-        if (total <= 0 || total > 35L * 1024 * 1024) {
-            return head;
-        }
-        int count = (int) ((total + chunk - 1) / chunk);
-        if (count <= 1) {
-            return head;
-        }
-        byte[][] parts = new byte[count][];
-        parts[0] = head;
-        java.util.concurrent.ExecutorService pool =
-                java.util.concurrent.Executors.newFixedThreadPool(Math.min(6, count - 1));
-        List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
-        try {
-            for (int i = 1; i < count; i++) {
-                final int index = i;
-                final long start = (long) i * chunk;
-                final long end = Math.min(total, start + chunk) - 1;
-                futures.add(pool.submit(() -> {
-                    parts[index] = fetchRange(url, baseHeaders, start, end);
-                    return null;
-                }));
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            while (true) {
+                if (current != null && offset < current.length) {
+                    int n = Math.min(len, current.length - offset);
+                    System.arraycopy(current, offset, b, off, n);
+                    offset += n;
+                    return n;
+                }
+                offset = 0;
+                current = null;
+                if (index + 1 >= count) {
+                    return -1;
+                }
+                index++;
+                java.util.concurrent.Future<byte[]> future = futures.get(index);
+                if (future == null) {
+                    return -1;
+                }
+                try {
+                    current = future.get(20, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    throw new IOException("segment chunk " + index + " failed: " + e, e);
+                }
             }
-            for (java.util.concurrent.Future<?> future : futures) {
-                future.get(20, java.util.concurrent.TimeUnit.SECONDS);
+        }
+
+        @Override
+        public void close() {
+            for (java.util.concurrent.Future<byte[]> f : futures.values()) {
+                f.cancel(true);
             }
-        } catch (Exception e) {
-            throw new IOException("parallel segment fetch failed: " + e.getMessage(), e);
-        } finally {
             pool.shutdownNow();
         }
-        byte[] out = new byte[(int) total];
-        int pos = 0;
-        for (byte[] part : parts) {
-            if (part == null) throw new IOException("segment chunk missing");
-            System.arraycopy(part, 0, out, pos, part.length);
-            pos += part.length;
-        }
-        return out;
     }
 
-    private byte[] fetchRange(String url, Map<String, String> baseHeaders, long start, long end)
-            throws IOException {
+    private static byte[] fetchChunk(String url, Map<String, String> baseHeaders,
+                                     long start, long end) throws IOException {
         IOException last = null;
         for (int attempt = 0; attempt < 2; attempt++) {
             Map<String, String> headers = new LinkedHashMap<>(baseHeaders);
@@ -1190,12 +1220,15 @@ public final class ChannelEngine {
         Map<String, String> headers = Upstream.playbackRequestHeaders(playbackHeaders, extra);
         boolean noRange = rangeHeader == null || rangeHeader.trim().isEmpty();
         if (noRange) {
-            byte[] data = fetchSegmentParallel(realUrl, headers);
+            ParallelSegmentInput parallel = new ParallelSegmentInput(realUrl, headers);
+            parallel.start();
             Map<String, String> outHeaders = new LinkedHashMap<>();
-            outHeaders.put("Content-Type", "video/mp2t");
-            outHeaders.put("Content-Length", String.valueOf(data.length));
-            return new SegmentStream(null, new java.io.ByteArrayInputStream(data), 200,
-                    outHeaders, data.length);
+            outHeaders.put("Content-Type", parallel.contentType == null
+                    ? "video/mp2t" : parallel.contentType);
+            if (parallel.totalLength > 0) {
+                outHeaders.put("Content-Length", String.valueOf(parallel.totalLength));
+            }
+            return new SegmentStream(null, parallel, 200, outHeaders, parallel.totalLength);
         }
         HttpURLConnection connection = Upstream.openStream(realUrl, headers, 25000);
         int status;
