@@ -99,8 +99,14 @@ public final class ChannelEngine {
      * <p>对齐 Python {@code JCE_COOLDOWN_SEC = 10.25}：真正的修复是复用 URL 不再频繁签名，
      * 冷却只是兜底，设太长反而会让一次偶发限流拖成整分钟的黑屏。
      */
-    /** 分片直连 CDN（不经过本机 /proxy.ts）；置 false 可回滚成全部代理。 */
-    private static final boolean DIRECT_CDN_SEGMENTS = true;
+    /**
+     * 分片直连 CDN（不经过本机 /proxy.ts）。
+     * <p>实测：央视频 CDN 对「完整 GET（无 Range）」严重限速（2MB 分片要 20–40s，
+     * IJK 默认发完整 GET，必然在加载超时内起不来）；而对 Range 请求可达数 MB/s。
+     * 播放器无法自带 Range 分片下载，必须走本机 /proxy.ts：由引擎把每片切成
+     * 512KB 分块并行 Range 取回流式喂给播放器。故默认关闭直连。
+     */
+    private static final boolean DIRECT_CDN_SEGMENTS = false;
 
     private static final long JCE_RATE_LIMIT_COOLDOWN_MS = 10_250L;
 
@@ -1145,20 +1151,19 @@ public final class ChannelEngine {
 
     /**
      * 按 512KB Range 分块 + 并行预取取流。
-     * <p>央视频 CDN 对「无 Range 的完整 GET」限速到约 12KB/s（2MB 分片要 20s+，
-     * 真机日志实测 18235ms/221KB）；即便带 Range，CDN 对<b>单条连接</b>仍有带宽上限
-     * （真机实测单连接约 190–270KB/s，4 条并行可达约 400KB/s）。1080p 直播需要
-     * 300KB/s 以上的稳定吞吐，单连接取流必然卡顿。
-     * <p>策略：首块走单连接同步拉取（起播只等这一块，512KB ≈ 2–3s）；之后维持
-     * WINDOW 个并发 Range 请求作流水线预取：{@link #submitWindow()} 非阻塞补齐在途请求，
-     * {@link #awaitFirst()} 只等队首一块就绪就立刻喂给播放器，其余块在后台继续下载。
-     * 这样播放缓冲不断档，聚合吞吐又随并发连接数放大。每块独立建连、独立重试（最多 3 次）。
+     * <p>央视频 CDN 对「无 Range 的完整 GET」严重限速（实测 2MB 分片要 20–40s），
+     * 但对 Range 请求可达数 MB/s（单连接实测 7MB/s）。播放器直连发完整 GET 必然卡，
+     * 所以经本机 /proxy.ts 由引擎按块并行取回流。
+     * <p>策略：首块走单连接同步拉取（起播只等这一块）；之后维持 WINDOW 个并发 Range
+     * 请求作流水线预取：{@link #submitWindow()} 非阻塞补齐在途请求，
+     * {@link #awaitFirst()} 只等队首一块就绪就立刻喂给播放器，其余块后台继续下载。
+     * 每块独立建连、独立重试（最多 3 次），卡住最多损失 512KB，不拖死整片。
      */
     static final class RangedSegmentInput extends InputStream {
         private static final int CHUNK = 512 * 1024;
-        /** 单次并发预取的分块数（在途连接上限）。 */
+        /** 在途并发 Range 请求上限。 */
         private static final int WINDOW = 4;
-        /** 共享取流线程池规模（WINDOW 在途 + 少量余量）。 */
+        /** 共享取流线程池规模。 */
         private static final int SEGMENT_WORKERS = 6;
         private static volatile ExecutorService segmentPool;
         private static final AtomicInteger segmentSeq = new AtomicInteger();
