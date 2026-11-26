@@ -130,7 +130,7 @@ object PlayerManager {
             p.setWakeMode(androidx.media3.common.C.WAKE_MODE_NETWORK)
             p.setVolume(audioGain)
             p.addListener(listener)
-            currentSurface?.let { p.setSurface(it) }
+            currentSurface?.let { p.setVideoSurface(it) }
 
             val item = MediaItem.fromUri(Uri.parse(url))
             val source = HlsMediaSource.Factory(dataSourceFactory)
@@ -164,7 +164,7 @@ object PlayerManager {
         override fun onPlayerError(error: PlaybackException) {
             AppLogStore.w(TAG, "onPlayerError: ${error.message}")
             setState(PlaybackState.IDLE)
-            events?.onError(error.errorCode, error.errorCodeNumber)
+            events?.onError(error.errorCode, 0)
         }
 
         override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
@@ -201,7 +201,7 @@ object PlayerManager {
 
     fun setSurface(surface: Surface?) {
         currentSurface = surface
-        player?.setSurface(surface)
+        player?.setVideoSurface(surface)
     }
 
     fun currentPositionMs(): Long = runCatching { player?.currentPosition ?: 0L }.getOrDefault(0L)
