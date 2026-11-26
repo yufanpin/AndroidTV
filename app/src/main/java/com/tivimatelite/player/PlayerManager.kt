@@ -26,9 +26,6 @@ object PlayerManager {
     // 网络一慢就是十几秒黑屏。压缩到 256KB / 0.5s，起播快很多。
     private const val OPT_PROBESIZE = "262144"
     private const val OPT_ANALYZEDURATION = "500000"
-    // 读缓冲上限（字节）。原来没设，用的是库默认值（几百 KB，只够零点几秒），
-    // 上游一抖动就缓冲空 → 画面卡住。给到 20MB 大约能存 30-40 秒，足以扛过抖动。
-    private const val OPT_MAX_BUFFER_SIZE = "20971520"
     private const val OPT_SKIP_LOOP_FILTER = 48L               // 0x30, CODEC 类别
     private const val OPT_FRAMEDROP = 5L
     private const val OPT_OVERLAY_FORMAT_RV32 = 842225234L     // SDL_FCC_RV32
@@ -263,7 +260,6 @@ object PlayerManager {
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", OPT_FRAMEDROP)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "overlay-format", OPT_OVERLAY_FORMAT_RV32)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", OPT_MAX_BUFFER_SIZE)
         // 音频增益：avfilter 链（`af` 同属 PLAYER(4) 类别，仅在 CONFIG_AVFILTER 下注册）
         buildAudioFilterChain()?.let {
             p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "af", it)

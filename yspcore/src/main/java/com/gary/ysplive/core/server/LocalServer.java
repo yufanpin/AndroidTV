@@ -414,6 +414,7 @@ public final class LocalServer {
 
         private void handleProxyTs(Request req, OutputStream out, String rawPath, boolean keepAlive)
                 throws IOException {
+            long proxyStartNs = System.nanoTime();
             String token = Upstream.proxyTsToken(rawPath);
             if (token == null || token.isEmpty()) {
                 sendText(out, req, 400, "missing proxy ts token\n",
@@ -429,6 +430,7 @@ public final class LocalServer {
                 return;
             }
             String rangeHeader = req.header("range");
+            long sentBytes = 0L;
             ChannelEngine.SegmentStream stream;
             try {
                 stream = engine.openSegmentStream(realUrl, rangeHeader);
@@ -471,13 +473,28 @@ public final class LocalServer {
                     int n;
                     while ((n = stream.body().read(buffer)) > 0) {
                         out.write(buffer, 0, n);
+                        sentBytes += n;
                     }
                 }
             } catch (java.net.SocketException | java.io.EOFException ignored) {
                 // 播放器主动断开
             } finally {
                 stream.close();
+                double costMs = (System.nanoTime() - proxyStartNs) / 1_000_000.0;
+                if (costMs > 1500.0) {
+                    // 慢分片是卡顿的直接证据：CDN 回源、连接被掐、或上游限速
+                    Log.w(TAG, "慢分片 " + (int) costMs + "ms / " + sentBytes + "B / HTTP "
+                            + stream.status + " / " + tailOf(realUrl, 56), 3.0);
+                }
             }
+        }
+
+        /** 取 URL 尾部用于日志定位（分片名即可区分）。 */
+        private static String tailOf(String url, int keep) {
+            if (url == null) {
+                return "";
+            }
+            return url.length() <= keep ? url : url.substring(url.length() - keep);
         }
 
         private static byte[] readSmall(InputStream in, int limit) {

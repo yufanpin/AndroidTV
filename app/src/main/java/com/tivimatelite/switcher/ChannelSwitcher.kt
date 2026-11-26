@@ -338,6 +338,12 @@ class ChannelSwitcher(
         private const val SINGLE_SOURCE_RETRY_MIN_GAP_MS = 10000L
         private const val SINGLE_SOURCE_RETRY_MAX_COUNT = 5
         // P2: 15s 初始加载超时
-        private const val CHANNEL_LOAD_TIMEOUT_MS = 25000L
+        /**
+         * 首片加载超时。
+         * <p>央视频 CDN 对「刚签出时移地址后的第一个分片」经常要回源，实测可达 20s+；
+         * 而重连一次后同一分片立刻就有（边缘已缓存）。所以宁可 12s 就重试，
+         * 也不要让用户对着黑屏干等 25s —— 后者体感更差，效果还一样。
+         */
+        private const val CHANNEL_LOAD_TIMEOUT_MS = 12000L
     }
 }
