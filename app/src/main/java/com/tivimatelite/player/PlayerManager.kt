@@ -95,24 +95,19 @@ object PlayerManager {
         events = value
     }
 
-    fun play(context: Context, url: String, forceHls: Boolean = false) {
-        appContext = context.applicationContext
-        currentUrl = url
-        playWhenReady = true
-        AppLogStore.i(TAG, "play url=$url forceHls=$forceHls audioGain=$audioGain")
-        setState(PlaybackState.BUFFERING)
+    /** 复用同一个 player 与数据源工厂，换台只换 MediaSource，避免 native 重建开销。 */
+    private var dataSourceFactory: DefaultHttpDataSource.Factory? = null
 
-        // 换台：先释放旧 player，保证旧分片连接立刻断开，首帧更快、避免连接堆积。
-        releaseInternal(resetState = false)
-
-        try {
-            val ctx = appContext ?: context.applicationContext
-            val dataSourceFactory = DefaultHttpDataSource.Factory()
+    private fun ensurePlayer(ctx: Context): ExoPlayer {
+        player?.let { return it }
+        synchronized(this) {
+            player?.let { return it }
+            val dsf = DefaultHttpDataSource.Factory()
                 .setUserAgent(USER_AGENT)
                 .setConnectTimeoutMs(CONNECT_TIMEOUT_MS)
                 .setReadTimeoutMs(READ_TIMEOUT_MS)
                 .setAllowCrossProtocolRedirects(true)
-
+            dataSourceFactory = dsf
             val loadControl = DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
                     (BUFFER_FORWARD_MS + BUFFER_BACK_MS).toInt(),
@@ -121,26 +116,40 @@ object PlayerManager {
                     3_000
                 )
                 .build()
-
-            val p = ExoPlayer.Builder(ctx)
-                .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            val p = ExoPlayer.Builder(ctx.applicationContext)
+                .setMediaSourceFactory(DefaultMediaSourceFactory(dsf))
                 .setLoadControl(loadControl)
                 .build()
-
             p.setWakeMode(androidx.media3.common.C.WAKE_MODE_NETWORK)
-            p.setVolume(audioGain)
             p.addListener(listener)
+            player = p
+            return p
+        }
+    }
+
+    fun play(context: Context, url: String, forceHls: Boolean = false) {
+        appContext = context.applicationContext
+        currentUrl = url
+        playWhenReady = true
+        AppLogStore.i(TAG, "play url=$url forceHls=$forceHls audioGain=$audioGain")
+        setState(PlaybackState.BUFFERING)
+
+        try {
+            val p = ensurePlayer(context)
+            p.setVolume(audioGain)
             currentSurface?.let { p.setVideoSurface(it) }
 
+            val dsf = dataSourceFactory ?: throw IllegalStateException("dataSourceFactory null")
             val item = MediaItem.fromUri(Uri.parse(url))
-            val source = HlsMediaSource.Factory(dataSourceFactory)
+            val source = HlsMediaSource.Factory(dsf)
                 .setAllowChunklessPreparation(true)
                 .createMediaSource(item)
+            // 换台：stop 后只换源，复用同一 player 实例（参考 ysp-live-android PlayerActivity）
+            p.stop()
+            p.clearMediaItems()
             p.setMediaSource(source)
             p.playWhenReady = true
             p.prepare()
-
-            synchronized(this) { player = p }
         } catch (t: Throwable) {
             AppLogStore.e(TAG, "play() failed for $url", t)
             events?.onError(0, 0)
@@ -193,6 +202,7 @@ object PlayerManager {
                 p.release()
             }
             player = null
+            dataSourceFactory = null
         }
         currentUrl = null
         playWhenReady = false

@@ -214,9 +214,9 @@ class MainActivity : AppCompatActivity() {
             scope = scope,
             channelCountProvider = { channelGroups.size },
             onChannelRequest = { targetIndex ->
-                val oldSlug = currentChannelSlug()
+                // 不主动 stopChannel：保留旧频道引擎后台线程与分片缓存（引擎 IDLE_TIMEOUT=120s
+                // 会自动回收），换台回来时直接命中缓存，避免重复 resolve 触发上游限流/首片 403。
                 channelSwitcher.switchChannelImmediately(targetIndex)
-                oldSlug?.let { YspEngine.stopChannel(it) }
             },
             channelNumberText = binding.channelNumberText
         )
@@ -442,9 +442,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestSwitchByDelta(delta: Int) {
-        val oldSlug = currentChannelSlug()
+        // 不主动 stopChannel：保留旧频道缓存以便换台秒开（引擎 120s 空闲自动回收）。
         channelSwitcher.requestSwitchByDelta(delta)
-        oldSlug?.let { YspEngine.stopChannel(it) }
     }
 
     private fun currentChannelSlug(): String? {
