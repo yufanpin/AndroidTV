@@ -217,10 +217,18 @@ public final class Upstream {
         return sb.toString();
     }
 
-    /** 拉 JCE 时移播放列表（带浏览器 UA）。 */
+    /** 拉 JCE 时移播放列表。对齐 Python {@code _jce_playlist_headers()}。 */
     public static String fetchJcePlaylist(String m3u8Url) throws IOException {
         Map<String, String> headers = new LinkedHashMap<>();
-        headers.put("User-Agent", UA);
+        // 关键：必须用官方客户端标识 qqlive + UID。
+        // 用浏览器 UA 会被 CDN 分到限速节点：实测同一分片浏览器 UA 只有 12KB/s，
+        // 而官方标识下 512KB 仅 0.22s（2.3MB/s）。
+        headers.put("User-Agent", "qqlive");
+        headers.put("Accept", "application/vnd.apple.mpegurl,application/x-mpegURL,*/*");
+        String guid = com.gary.ysplive.core.jce.JceRequest.guid();
+        if (guid != null && !guid.trim().isEmpty()) {
+            headers.put("UID", guid);
+        }
         Resp resp = httpGet(m3u8Url, headers, JCE_TIMEOUT_MS);
         if (!resp.ok()) {
             throw new IOException("HTTP " + resp.status);
