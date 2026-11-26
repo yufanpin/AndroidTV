@@ -108,6 +108,13 @@ public final class DeviceResolver implements Resolver {
     private String lastError = "";
     private double lastErrorAt;
 
+    /**
+     * 全局限流冷却截止时间（秒）。上游对设备 identity 的 API 请求有频率配额，
+     * 连续换台会让 3 接口连打撞上"操作过于频繁"；一旦命中，全局暂停所有 resolve
+     * 一段时间，避免换台时雪崩式重试（旧逻辑会误判为身份错误去换设备，越换越糟）。
+     */
+    private volatile double rateLimitUntilSec;
+
     // 换台防抖
     private final Map<String, Double> zapTimes = new HashMap<>();
     private final Set<String> zapPendingChannels = new HashSet<>();
@@ -402,6 +409,12 @@ public final class DeviceResolver implements Resolver {
         } catch (ResolutionException e) {
             recordFailure(channel, e.getMessage());
             resolveFailCount.incrementAndGet();
+            // 上游限流："操作过于频繁" → 全局冷却，不再误判为身份错误去换设备（越换越糟）
+            if (isRateLimitError(e.getMessage())) {
+                rateLimitUntilSec = nowSec() + 8.0;
+                Log.w(TAG, "[" + channel + "] 上游限流，全局暂停 resolve 8s", 5.0);
+                throw e;
+            }
             // HTTP 400 一类身份失效 → 换设备后重试一次
             if (isIdentityError(e.getMessage()) && rotateDeviceOn400(channel + ":" + abbrev(e.getMessage(), 60))) {
                 try {
@@ -1739,10 +1752,26 @@ public final class DeviceResolver implements Resolver {
         double wait;
         synchronized (stateLock) {
             wait = REFRESH_INTERVAL_SEC - (nowSec() - lastBusinessEndAt);
+            // 全局限流冷却中：所有 resolve 都等待，避免连续换台雪崩
+            double rl = rateLimitUntilSec - nowSec();
+            if (rl > wait) {
+                wait = rl;
+            }
         }
-        if (wait > 0 && wait < 10) {
+        if (wait > 0 && wait < 30) {
             sleepMs((long) (wait * 1000));
         }
+    }
+
+    /** 上游"操作过于频繁"类限流错误：与身份失效区分开，避免误触发换设备。 */
+    private static boolean isRateLimitError(String message) {
+        if (message == null) {
+            return false;
+        }
+        return message.contains("操作过于频繁")
+                || message.toLowerCase(java.util.Locale.ROOT).contains("too frequent")
+                || message.contains("请求过于频繁")
+                || message.contains("访问过于频繁");
     }
 
     private void markBusinessEnd() {
