@@ -1543,7 +1543,35 @@ public final class ChannelEngine {
         Map<String, String> headers = Upstream.playbackRequestHeaders(playbackHeaders, extra);
 
         // 3) 请求上游
-        Upstream.Resp resp = Upstream.httpGet(realUrl, headers, 30_000);
+        //    央视频 CDN 对「完整 GET（无 Range）」严重限速（实测 2MB 分片要 40s+），
+        //    播放器 ExoPlayer 的 15s read timeout 必然等不到 → 一直 BUFFERING 无首帧。
+        //    所以无 Range 时用 RangedSegmentInput 按 512KB 分块并行 Range 取流（数 MB/s），
+        //    再聚合成整片返回；有 Range 才走原始单连接透传。
+        Upstream.Resp resp;
+        if (!hasRange) {
+            Map<String, String> rangedHeaders = new LinkedHashMap<>(headers);
+            rangedHeaders.remove("Range");
+            RangedSegmentInput ranged = new RangedSegmentInput(realUrl, rangedHeaders);
+            try {
+                ranged.start();
+                byte[] whole = readAll(ranged);
+                ranged.close();
+                Map<String, String> rh = new LinkedHashMap<>();
+                rh.put("Content-Type", "video/mp2t");
+                rh.put("Content-Length", String.valueOf(whole.length));
+                resp = new Upstream.Resp(200, "OK", rh, whole);
+            } catch (IOException e) {
+                // 403/404 需要进入下方 3b 的 bk 轮换逻辑，构造一个带状态码的 Resp
+                String msg = e.getMessage() == null ? "" : e.getMessage();
+                int st = 502;
+                if (msg.contains("403")) st = 403;
+                else if (msg.contains("404")) st = 404;
+                Map<String, String> errh = new LinkedHashMap<>();
+                resp = new Upstream.Resp(st, msg, errh, new byte[0]);
+            }
+        } else {
+            resp = Upstream.httpGet(realUrl, headers, 30_000);
+        }
 
         // 3b) 分片被拒（403/404）→ 若是 bk 通道，轮换到下一个候选 CDN 并就地重试一次。
         //     背景：某些 CDN 的播放列表能拉通，但数据面整片 403（实测 cctv4k 候选 0 全 403、
