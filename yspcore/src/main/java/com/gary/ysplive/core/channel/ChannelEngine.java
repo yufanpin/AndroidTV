@@ -92,6 +92,9 @@ public final class ChannelEngine {
      * <p>对齐 Python {@code JCE_COOLDOWN_SEC = 10.25}：真正的修复是复用 URL 不再频繁签名，
      * 冷却只是兜底，设太长反而会让一次偶发限流拖成整分钟的黑屏。
      */
+    /** 分片直连 CDN（不经过本机 /proxy.ts）；置 false 可回滚成全部代理。 */
+    private static final boolean DIRECT_CDN_SEGMENTS = true;
+
     private static final long JCE_RATE_LIMIT_COOLDOWN_MS = 10_250L;
 
     /** 一次 m3u8 响应的完整信息（供 HTTP 层直接写 socket）。 */
@@ -881,7 +884,7 @@ public final class ChannelEngine {
         if (catchup != null && ChannelTable.supportsTimeshift(canonical)) {
             String pl = timeshiftPlaylist(ch, catchup);
             if (pl != null) {
-                return new PlaylistResult(200, proxySegments(pl, scheme, host),
+                return new PlaylistResult(200, directSegments(pl, scheme, host),
                         "application/vnd.apple.mpegurl", null);
             }
         }
@@ -939,7 +942,7 @@ public final class ChannelEngine {
             if (cachedAge > SWR_REFRESH_AFTER_SEC) {
                 triggerBackgroundRefresh(ch);
             }
-            return new PlaylistResult(200, proxySegments(cachedPl, scheme, host),
+            return new PlaylistResult(200, directSegments(cachedPl, scheme, host),
                     "application/vnd.apple.mpegurl", headers);
         }
 
@@ -958,7 +961,7 @@ public final class ChannelEngine {
             if (Channel.SOURCE_DEVICE.equals(prevSrc)) {
                 pl = Upstream.injectHlsDiscontinuity(pl);
             }
-            return new PlaylistResult(200, proxySegments(pl, scheme, host),
+            return new PlaylistResult(200, directSegments(pl, scheme, host),
                     "application/vnd.apple.mpegurl", null);
         }
 
@@ -982,6 +985,19 @@ public final class ChannelEngine {
      * <p>原因：部分 CDN 只对 IPv6 可达/直连不稳，而播放器在本机走 IPv4 回环最稳；
      * 同时引擎侧可以做统一 UA、Range 与内存缓存。
      */
+    /**
+     * 分片地址是否改写成本机代理。
+     * <p>JCE / BK 的分片是公开 CDN 地址，播放器可以直连：实测直连 2.7MB/s，
+     * 而绕引擎代理只有 0.09MB/s，差 30 倍。只有设备协议（高码率）的分片
+     * 需要签名头，才必须走 /proxy.ts。
+     */
+    private String directSegments(String playlist, String proto, String host) {
+        if (DIRECT_CDN_SEGMENTS) {
+            return playlist;
+        }
+        return proxySegments(playlist, proto, host);
+    }
+
     private String proxySegments(String playlist, String proto, String host) {
         if (playlist == null || playlist.isEmpty() || playlist.contains("/proxy.ts?")) {
             return playlist;
