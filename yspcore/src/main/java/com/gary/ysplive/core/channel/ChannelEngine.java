@@ -650,7 +650,18 @@ public final class ChannelEngine {
                 ch.buildPlaylist(true);
             }
             fails = ok ? 0 : fails + 1;
-            sleepQuietly((fails < 3 ? REFRESH_INTERVAL : 30) * 1000L);
+            // 退避：bk 通道的上游(bkliveinfo)对请求频率敏感，连续换台时若多个频道
+            // 后台线程每 10s 各打一次会撞"操作过于频繁"。失败后快速退避到 60s，
+            // 成功则恢复常规间隔。高码率/成功频道不受影响。
+            long intervalSec;
+            if (fails >= 3) {
+                intervalSec = 60L;
+            } else if (fails == 0) {
+                intervalSec = REFRESH_INTERVAL;
+            } else {
+                intervalSec = 30L;
+            }
+            sleepQuietly(intervalSec * 1000L);
         }
         Log.i(TAG, "[" + ch.slug() + "] 空闲超时，已停止后台拉取", 10.0);
     }

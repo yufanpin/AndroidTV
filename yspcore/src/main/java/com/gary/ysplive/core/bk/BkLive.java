@@ -92,10 +92,10 @@ public final class BkLive {
         }
     }
 
-    /** 上游返回"操作过于频繁"时标记全局冷却。 */
+    /** 上游返回"操作过于频繁"时标记全局冷却（上游配额恢复较慢，冷却要足够长）。 */
     private static void noteRateLimited() {
         synchronized (FLOW_LOCK) {
-            rateLimitUntilMs = System.currentTimeMillis() + 15_000L;
+            rateLimitUntilMs = System.currentTimeMillis() + 45_000L;
         }
     }
 
