@@ -123,6 +123,18 @@ public final class Channel {
     /** 连续 bk 刷新成功计数；达到阈值就把阶梯复位回默认清晰度。 */
     private int bkSuccessStreak;
 
+    /**
+     * JCE 时移 URL 缓存（对齐 Python 的 {@code ch.jce_m3u8_url}）。
+     * <p>签名接口有频率限制（"您的操作过于频繁"），而业界的窗口是
+     * {@code [now-120, now+900]}，同一个 URL 可以持续拉到新的直播分片。
+     * 所以签一次名就该反复用，而不是每次刷新都重新签。
+     */
+    private volatile String jceM3u8Url = "";
+    /** 软过期：在此之前一律复用缓存 URL。 */
+    private volatile double jceUrlSoftExpire;
+    /** 硬过期：上游处于限流冷却时，仍允许复用（宁可复用也不去撞签名接口）。 */
+    private volatile double jceUrlHardExpire;
+
     private boolean starting;
     private String lastBuiltPlaylist = "";
     private double lastBuiltTime;
@@ -268,6 +280,30 @@ public final class Channel {
         synchronized (lock) {
             bkPlaylist = value == null ? "" : value;
         }
+    }
+
+    public String jceM3u8Url() {
+        return jceM3u8Url;
+    }
+
+    public void setJceM3u8Url(String value) {
+        this.jceM3u8Url = value == null ? "" : value;
+    }
+
+    public double jceUrlSoftExpire() {
+        return jceUrlSoftExpire;
+    }
+
+    public void setJceUrlSoftExpire(double value) {
+        this.jceUrlSoftExpire = value;
+    }
+
+    public double jceUrlHardExpire() {
+        return jceUrlHardExpire;
+    }
+
+    public void setJceUrlHardExpire(double value) {
+        this.jceUrlHardExpire = value;
     }
 
     public List<String> bkUrls() {

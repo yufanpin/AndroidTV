@@ -51,8 +51,22 @@ public final class ChannelEngine {
     public static final int CACHE_STALE_SEC = 300;
     /** 设备链接空闲回收窗口（秒），Python {@code LINK_IDLE_TIMEOUT}。 */
     public static final double LINK_IDLE_TIMEOUT = 15.0;
-    /** JCE 时移窗口（秒），Python {@code WINDOW}。 */
-    public static final int WINDOW = 300;
+    /**
+     * JCE 时移窗口起点偏移（秒），Python {@code JCE_LIVE_PAST_SEC = 120}。
+     * <p>这个窗口不是「回看 5 分钟」，而是请求一个从 120s 前一直延伸到未来的
+     * 直播流入口：签一次名就能持续拉到新分片。
+     */
+    public static final int JCE_LIVE_PAST_SEC = 120;
+    /** JCE 时移窗口终点偏移（秒），Python {@code JCE_LIVE_FUTURE_SEC = 900}。 */
+    public static final int JCE_LIVE_FUTURE_SEC = 900;
+    /**
+     * 时移 URL 软过期（秒），Python {@code JCE_LIVE_SOFT_TTL_SEC = 810}。
+     * <p>签一次名复用 13.5 分钟。签名接口有频率限制，
+     * 每次刷新都重新签必然触发「您的操作过于频繁」。
+     */
+    public static final double JCE_LIVE_SOFT_TTL_SEC = 810.0;
+    /** 时移 URL 硬过期（秒），Python {@code JCE_LIVE_HARD_TTL_SEC = 885}。 */
+    public static final double JCE_LIVE_HARD_TTL_SEC = 885.0;
     /** 分片队列上限，Python {@code MAX_SEGS}。 */
     public static final int MAX_SEGS = 120;
     /** bkliveinfo 地址缓存 TTL（秒），Python {@code BK_URL_TTL}。 */
@@ -73,8 +87,12 @@ public final class ChannelEngine {
     public static final double BK_ROTATE_MIN_INTERVAL_SEC = 20.0;
     /** bk 候选探活时检查多少个分片（分片可用性按片变化，只探首片会误杀）。 */
     private static final int PROBE_SEG_COUNT = 3;
-    /** JCE 触发“操作过于频繁”后的全局冷却时间（2 分钟，给上游风控窗口留出恢复时间）。 */
-    private static final long JCE_RATE_LIMIT_COOLDOWN_MS = 30_000L;
+    /**
+     * JCE 触发“操作过于频繁”后的全局冷却时间。
+     * <p>对齐 Python {@code JCE_COOLDOWN_SEC = 10.25}：真正的修复是复用 URL 不再频繁签名，
+     * 冷却只是兜底，设太长反而会让一次偶发限流拖成整分钟的黑屏。
+     */
+    private static final long JCE_RATE_LIMIT_COOLDOWN_MS = 10_250L;
 
     /** 一次 m3u8 响应的完整信息（供 HTTP 层直接写 socket）。 */
     public static final class PlaylistResult {
@@ -434,23 +452,52 @@ public final class ChannelEngine {
         return parseJceText(text, ch);
     }
 
-    /** 真实网络路径：限速 → 换时移地址 → 拉播放列表。 */
+    /**
+     * 真实网络路径：复用/更换时移地址 → 拉播放列表。
+     * <p>对齐 Python {@code jce_fetch}：签一次名复用 810s。早先每次刷新都重新签名，
+     * 结果是每 5s 撞一次「您的操作过于频繁」，列表停止更新、播放器播完就断流。
+     */
     private String jceFetchReal(Channel ch) throws Exception {
         long nowMs = System.currentTimeMillis();
-        long cooldownUntil = jceCooldownUntilMs.get();
-        if (nowMs < cooldownUntil) {
-            throw new IOException("JCE 限流冷却中，剩余 " + ((cooldownUntil - nowMs) / 1000) + "s");
+        double now = Channel.nowSec();
+        String cached = ch.jceM3u8Url();
+        boolean hasCached = cached != null && !cached.isEmpty();
+
+        if (!hasCached || now >= ch.jceUrlSoftExpire()) {
+            long cooldownUntil = jceCooldownUntilMs.get();
+            boolean cooling = nowMs < cooldownUntil;
+            // 冷却期内如果硬缓存还活着，就继续用它：宁可复用旧 URL，
+            // 也不去撞签名接口，否则限流只会越滚越长。
+            boolean hardReusable = hasCached && cooling && now < ch.jceUrlHardExpire();
+            if (cooling && !hardReusable) {
+                throw new IOException("JCE 限流冷却中，剩余 "
+                        + ((cooldownUntil - nowMs) / 1000) + "s");
+            }
+            if (!hardReusable) {
+                flowLimiter.waitSlot();
+                long nowSec = nowMs / 1000L;
+                String url = Upstream.jceTimeshiftUrl(ch.pid(), ch.sid(),
+                        nowSec - JCE_LIVE_PAST_SEC, nowSec + JCE_LIVE_FUTURE_SEC, ch.defn());
+                ch.setJceM3u8Url(url);
+                ch.setJceUrlSoftExpire(now + JCE_LIVE_SOFT_TTL_SEC);
+                ch.setJceUrlHardExpire(now + JCE_LIVE_HARD_TTL_SEC);
+                Log.i(TAG, "[" + ch.slug() + "] 时移地址已更新，"
+                        + (int) JCE_LIVE_SOFT_TTL_SEC + "s 内复用", 30.0);
+            }
         }
-        flowLimiter.waitSlot();
-        long now = nowMs / 1000L;
+
+        String m3u8Url = ch.jceM3u8Url();
         try {
-            String m3u8Url = Upstream.jceTimeshiftUrl(
-                    ch.pid(), ch.sid(), now - WINDOW, now, ch.defn());
             return Upstream.fetchJcePlaylist(m3u8Url);
         } catch (IllegalArgumentException e) {
             String message = e.getMessage();
-            if (message != null && (message.contains("频繁") || message.contains("35005"))) {
-                // 全局冷却：避免多个频道在限流窗口里互相踩踏
+            boolean rateLimited = message != null
+                    && (message.contains("频繁") || message.contains("35005"));
+            if (rateLimited) {
+                // 这个 URL 已经不被接受了：丢掉缓存，让下次重新签名
+                ch.setJceM3u8Url("");
+                ch.setJceUrlSoftExpire(0);
+                ch.setJceUrlHardExpire(0);
                 jceCooldownUntilMs.set(System.currentTimeMillis() + JCE_RATE_LIMIT_COOLDOWN_MS);
                 Log.i(TAG, "[" + ch.slug() + "] JCE 触发限流，全局冷却 "
                         + (JCE_RATE_LIMIT_COOLDOWN_MS / 1000) + "s", 10.0);
