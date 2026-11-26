@@ -40,11 +40,11 @@ public final class ChannelEngine {
     private static final String TAG = "engine";
 
     /**
-     * 刷新间隔（秒），Python {@code REFRESH_INTERVAL}。
-     * <p>必须明显小于播放列表覆盖时长（14 片 × 5s ≈ 70s），否则播放器播到列表末尾
-     * 只能干等下一次刷新，表现为周期性卡顿。这里取 8s，约等于两个分片。
+     * 刷新间隔（秒），与 Python 版 {@code REFRESH_INTERVAL = 5} 对齐。
+     * <p>必须明显小于播放列表覆盖时长（14 片 × 5s ≈ 70s）：原来 60s 的间隔意味着
+     * 播完列表还得干等下一次刷新，表现就是周期性卡顿。
      */
-    public static final int REFRESH_INTERVAL = 8;
+    public static final int REFRESH_INTERVAL = 5;
     /** 空闲多少秒后停止后台拉流，Python {@code IDLE_TIMEOUT}。 */
     public static final int IDLE_TIMEOUT = 120;
     /** 分片缓存超过这个年龄才允许清空重拉（必须大于 REFRESH_INTERVAL）。 */
@@ -58,14 +58,14 @@ public final class ChannelEngine {
     /** bkliveinfo 地址缓存 TTL（秒），Python {@code BK_URL_TTL}。 */
     public static final int BK_URL_TTL = 300;
     /**
-     * SWR 缓存窗口（秒）。
-     * <p>这个值必须小于播放列表覆盖时长，否则引擎会把「已经播完的旧列表」当成新鲜数据
-     * 一直返回，播放器拿不到新分片就会卡住。12s 约等于两个分片，既能挡住并发请求，
-     * 又保证最多 12s 就重建一次列表。
+     * SWR 缓存窗口（秒）。Python 里是 {@code cached_age < 5.0} 的硬编码判定，
+     * 且默认 {@code stale_while_refresh_ttl = 0} —— 宁可直接同步重建，也不拿过期列表。
+     * <p>这个值必须 ≤ {@link #REFRESH_INTERVAL}：超过刷新间隔还返回缓存，
+     * 等于把「已经播完的列表」继续喂给播放器，必然卡住。
      */
-    public static final double SWR_TTL_SEC = 12.0;
+    public static final double SWR_TTL_SEC = 5.0;
     /** 超过这个年龄就顺手触发后台刷新。 */
-    public static final double SWR_REFRESH_AFTER_SEC = 4.0;
+    public static final double SWR_REFRESH_AFTER_SEC = 2.0;
     /**
      * 同一频道两次"bk 候选 CDN 轮换"的最小间隔（秒）。
      * <p>限流目的：真死的频道不能被打成无限重试；而正常的坏 CDN 一次轮换后就能恢复。
