@@ -39,8 +39,12 @@ public final class ChannelEngine {
 
     private static final String TAG = "engine";
 
-    /** 刷新间隔（秒），Python {@code REFRESH_INTERVAL}。 */
-    public static final int REFRESH_INTERVAL = 60;
+    /**
+     * 刷新间隔（秒），Python {@code REFRESH_INTERVAL}。
+     * <p>必须明显小于播放列表覆盖时长（14 片 × 5s ≈ 70s），否则播放器播到列表末尾
+     * 只能干等下一次刷新，表现为周期性卡顿。这里取 8s，约等于两个分片。
+     */
+    public static final int REFRESH_INTERVAL = 8;
     /** 空闲多少秒后停止后台拉流，Python {@code IDLE_TIMEOUT}。 */
     public static final int IDLE_TIMEOUT = 120;
     /** 分片缓存超过这个年龄才允许清空重拉（必须大于 REFRESH_INTERVAL）。 */
@@ -53,10 +57,15 @@ public final class ChannelEngine {
     public static final int MAX_SEGS = 120;
     /** bkliveinfo 地址缓存 TTL（秒），Python {@code BK_URL_TTL}。 */
     public static final int BK_URL_TTL = 300;
-    /** SWR 缓存窗口（秒）。ysp 分支放宽到 90s：上游限流时用旧列表顶住，避免直接 503。 */
-    public static final double SWR_TTL_SEC = 150.0;
+    /**
+     * SWR 缓存窗口（秒）。
+     * <p>这个值必须小于播放列表覆盖时长，否则引擎会把「已经播完的旧列表」当成新鲜数据
+     * 一直返回，播放器拿不到新分片就会卡住。12s 约等于两个分片，既能挡住并发请求，
+     * 又保证最多 12s 就重建一次列表。
+     */
+    public static final double SWR_TTL_SEC = 12.0;
     /** 超过这个年龄就顺手触发后台刷新。 */
-    public static final double SWR_REFRESH_AFTER_SEC = 45.0;
+    public static final double SWR_REFRESH_AFTER_SEC = 4.0;
     /**
      * 同一频道两次"bk 候选 CDN 轮换"的最小间隔（秒）。
      * <p>限流目的：真死的频道不能被打成无限重试；而正常的坏 CDN 一次轮换后就能恢复。
@@ -655,7 +664,11 @@ public final class ChannelEngine {
                 ch.buildPlaylist(true);
             }
             fails = ok ? 0 : fails + 1;
-            sleepQuietly((fails < 3 ? REFRESH_INTERVAL : 30) * 1000L);
+            // 失败时快速重试（2/4/8/16s，封顶 30s）：上游卡顿往往是几秒的事，
+            // 原来一次失败就退避 30-60s，等于把「抖动」放大成「播完列表还没恢复」。
+            sleepQuietly(fails == 0
+                    ? REFRESH_INTERVAL * 1000L
+                    : Math.min(30_000L, 2000L << Math.min(fails - 1, 3)));
         }
         Log.i(TAG, "[" + ch.slug() + "] 空闲超时，已停止后台拉取", 10.0);
     }
@@ -1027,164 +1040,6 @@ public final class ChannelEngine {
 
     // ------------------------------------------------------------------ 分片代理
 
-    /**
-     * 并行分块的顺序流：先同步取第一块拿到总长度并立刻回响应头，
-     * 其余 256KB 块并行预取，按顺序吐给播放器。
-     * <p>央视频 CDN 单连接串行下载会限速到 ~50KB/s，但 6 路并行 Range 可以跑满带宽。
-     */
-    static final class ParallelSegmentInput extends InputStream {
-        private static final int CHUNK = 256 * 1024;
-        private final String url;
-        private final Map<String, String> baseHeaders;
-        private final java.util.concurrent.ExecutorService pool =
-                java.util.concurrent.Executors.newFixedThreadPool(6);
-        private final Map<Integer, java.util.concurrent.Future<byte[]>> futures =
-                new java.util.HashMap<>();
-        private byte[] current;
-        private int offset;
-        private int index;
-        private int count;
-        String contentType;
-        long totalLength = -1L;
-
-        ParallelSegmentInput(String url, Map<String, String> baseHeaders) {
-            this.url = url;
-            this.baseHeaders = baseHeaders;
-        }
-
-        void start() throws IOException {
-            Map<String, String> headers = new LinkedHashMap<>(baseHeaders);
-            headers.put("Range", "bytes=0-" + (CHUNK - 1));
-            HttpURLConnection conn = Upstream.openStream(url, headers, 15000);
-            try {
-                int status = conn.getResponseCode();
-                if (status == 200) {
-                    current = readAll(conn.getInputStream());
-                    totalLength = current.length;
-                    count = 1;
-                    return;
-                }
-                if (status != 206) {
-                    throw new IOException("upstream HTTP " + status);
-                }
-                String contentRange = conn.getHeaderField("Content-Range");
-                long total = parseContentRangeTotal(contentRange);
-                if (total <= 0 || total > 35L * 1024 * 1024) {
-                    current = readAll(conn.getInputStream());
-                    totalLength = current.length;
-                    count = 1;
-                    return;
-                }
-                current = readAll(conn.getInputStream());
-                totalLength = total;
-                count = (int) ((total + CHUNK - 1) / CHUNK);
-                contentType = conn.getContentType();
-                long firstExpected = Math.min((long) CHUNK, total);
-                if (current.length != firstExpected) {
-                    current = fetchChunk(url, baseHeaders, 0, firstExpected - 1);
-                }
-                for (int i = 1; i < count; i++) {
-                    final int idx = i;
-                    final long start = (long) i * CHUNK;
-                    final long end = Math.min(total, start + CHUNK) - 1;
-                    futures.put(idx, pool.submit(() -> fetchChunk(url, baseHeaders, start, end)));
-                }
-            } finally {
-                conn.disconnect();
-            }
-        }
-
-        @Override
-        public int read() throws IOException {
-            byte[] one = new byte[1];
-            int n = read(one, 0, 1);
-            return n <= 0 ? -1 : one[0] & 0xFF;
-        }
-
-        @Override
-        public int read(byte[] b, int off, int len) throws IOException {
-            while (true) {
-                if (current != null && offset < current.length) {
-                    int n = Math.min(len, current.length - offset);
-                    System.arraycopy(current, offset, b, off, n);
-                    offset += n;
-                    return n;
-                }
-                offset = 0;
-                current = null;
-                if (index + 1 >= count) {
-                    return -1;
-                }
-                index++;
-                java.util.concurrent.Future<byte[]> future = futures.get(index);
-                if (future == null) {
-                    return -1;
-                }
-                try {
-                    current = future.get(20, java.util.concurrent.TimeUnit.SECONDS);
-                } catch (Exception e) {
-                    throw new IOException("segment chunk " + index + " failed: " + e, e);
-                }
-            }
-        }
-
-        @Override
-        public void close() {
-            for (java.util.concurrent.Future<byte[]> f : futures.values()) {
-                f.cancel(true);
-            }
-            pool.shutdownNow();
-        }
-    }
-
-    private static byte[] fetchChunk(String url, Map<String, String> baseHeaders,
-                                     long start, long end) throws IOException {
-        IOException last = null;
-        for (int attempt = 0; attempt < 2; attempt++) {
-            Map<String, String> headers = new LinkedHashMap<>(baseHeaders);
-            headers.put("Range", "bytes=" + start + "-" + end);
-            HttpURLConnection conn = Upstream.openStream(url, headers, 15000);
-            try {
-                int status = conn.getResponseCode();
-                if (status != 206 && status != 200) {
-                    throw new IOException("chunk HTTP " + status);
-                }
-                byte[] data = readAll(conn.getInputStream());
-                long expected = end - start + 1;
-                if (data.length != expected) {
-                    throw new IOException("short chunk " + data.length + "/" + expected);
-                }
-                return data;
-            } catch (IOException e) {
-                last = e;
-            } finally {
-                conn.disconnect();
-            }
-        }
-        throw last == null ? new IOException("chunk fetch failed") : last;
-    }
-
-    private static long parseContentRangeTotal(String contentRange) {
-        if (contentRange == null) return -1L;
-        int slash = contentRange.lastIndexOf('/');
-        if (slash < 0 || slash + 1 >= contentRange.length()) return -1L;
-        try {
-            return Long.parseLong(contentRange.substring(slash + 1).trim());
-        } catch (NumberFormatException e) {
-            return -1L;
-        }
-    }
-
-    private static byte[] readAll(InputStream in) throws IOException {
-        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream(256 * 1024);
-        byte[] buf = new byte[64 * 1024];
-        int n;
-        while ((n = in.read(buf)) > 0) {
-            bos.write(buf, 0, n);
-        }
-        return bos.toByteArray();
-    }
-
     /** 流式分片：不整体入内存，直接边下边发给播放器。 */
     public static final class SegmentStream implements java.io.Closeable {
         public final int status;
@@ -1244,19 +1099,11 @@ public final class ChannelEngine {
             extra.put("Range", Upstream.headerValueClean(rangeHeader));
         }
         Map<String, String> headers = Upstream.playbackRequestHeaders(playbackHeaders, extra);
-        boolean noRange = rangeHeader == null || rangeHeader.trim().isEmpty();
-        if (noRange) {
-            ParallelSegmentInput parallel = new ParallelSegmentInput(realUrl, headers);
-            parallel.start();
-            Map<String, String> outHeaders = new LinkedHashMap<>();
-            outHeaders.put("Content-Type", parallel.contentType == null
-                    ? "video/mp2t" : parallel.contentType);
-            if (parallel.totalLength > 0) {
-                outHeaders.put("Content-Length", String.valueOf(parallel.totalLength));
-            }
-            return new SegmentStream(null, parallel, 200, outHeaders, parallel.totalLength);
-        }
-        HttpURLConnection connection = Upstream.openStream(realUrl, headers, 25000);
+        // 单连接流式转发（对齐 Python 版 proxy.ts 的做法）：
+        // 直接透传 Range，拿到响应头立刻回，之后边读边发。
+        // 曾经这里按 256KB 并行 Range 分块，是为了绕开某台 PC 的出口限速，
+        // 但在正常网络下反而更慢——8 个连接里任何一块卡住，整片就卡住。
+        HttpURLConnection connection = Upstream.openStream(realUrl, headers, 8000);
         int status;
         try {
             status = connection.getResponseCode();

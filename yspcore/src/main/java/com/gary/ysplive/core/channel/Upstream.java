@@ -42,7 +42,12 @@ public final class Upstream {
     /** 单次上游播放列表拉取超时。 */
     public static final int PLAYLIST_TIMEOUT_MS = 10_000;
     /** JCE 请求超时（Python 是 20s urlopen）。 */
-    public static final int JCE_TIMEOUT_MS = 20_000;
+    /**
+     * JCE 播放列表请求超时（毫秒）。
+     * <p>一个 m3u8 只有几 KB，正常 0.2s 内返回；原来给 20s，一旦 CDN 卡住就会
+     * 把后台刷新线程整整堵住 20 秒，播放列表直接过期。6s 足够，也留了重试机会。
+     */
+    public static final int JCE_TIMEOUT_MS = 6_000;
 
     /** 分片大小上限（Python 是 35MB 的硬闸）。 */
     public static final int MAX_SEGMENT_BYTES = 35 * 1024 * 1024;
