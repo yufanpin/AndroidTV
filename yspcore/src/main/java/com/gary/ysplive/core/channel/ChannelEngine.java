@@ -1121,6 +1121,165 @@ public final class ChannelEngine {
     }
 
     /**
+     * 按 512KB Range 串行取流。
+     * <p>央视频 CDN 对「无 Range 的完整 GET」限速到约 12KB/s（2MB 分片要 20s+，
+     * 真机日志实测 18235ms/221KB），但对 Range 请求正常（实测 6.3MB/s）。
+     * 所以即使播放器没带 Range，我们也要自己切片：每块单独建连、独立超时重试，
+     * 卡住最多损失 512KB，不会拖死整片。
+     */
+    static final class RangedSegmentInput extends InputStream {
+        private static final int CHUNK = 512 * 1024;
+        private final String url;
+        private final Map<String, String> baseHeaders;
+        private byte[] current;
+        private int offset;
+        private long nextStart;
+        long totalLength = -1L;
+        /** CDN 不支持 Range（回 200）时退化成直读这条连接。 */
+        private HttpURLConnection direct;
+        private InputStream directBody;
+
+        RangedSegmentInput(String url, Map<String, String> baseHeaders) {
+            this.url = url;
+            this.baseHeaders = baseHeaders;
+        }
+
+        void start() throws IOException {
+            Map<String, String> h = new LinkedHashMap<>(baseHeaders);
+            h.put("Range", "bytes=0-" + (CHUNK - 1));
+            HttpURLConnection conn = Upstream.openStream(url, h, 6000);
+            int status;
+            try {
+                status = conn.getResponseCode();
+            } catch (IOException e) {
+                conn.disconnect();
+                throw e;
+            }
+            if (status == 200) {
+                totalLength = conn.getContentLengthLong();
+                direct = conn;
+                directBody = conn.getInputStream();
+                nextStart = -1;
+                return;
+            }
+            if (status != 206) {
+                conn.disconnect();
+                throw new IOException("upstream HTTP " + status);
+            }
+            totalLength = parseContentRangeTotal(conn.getHeaderField("Content-Range"));
+            try {
+                current = readAll(conn.getInputStream());
+            } finally {
+                conn.disconnect();
+            }
+            long expected = totalLength > 0 ? Math.min((long) CHUNK, totalLength) : current.length;
+            if (current.length != expected) {
+                current = fetchRange(0, expected - 1);
+            }
+            nextStart = current.length;
+        }
+
+        @Override
+        public int read() throws IOException {
+            byte[] one = new byte[1];
+            int n = read(one, 0, 1);
+            return n <= 0 ? -1 : one[0] & 0xFF;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            while (true) {
+                if (current != null && offset < current.length) {
+                    int n = Math.min(len, current.length - offset);
+                    System.arraycopy(current, offset, b, off, n);
+                    offset += n;
+                    return n;
+                }
+                if (directBody != null) {
+                    return directBody.read(b, off, len);
+                }
+                current = null;
+                offset = 0;
+                if (nextStart < 0 || (totalLength > 0 && nextStart >= totalLength)) {
+                    return -1;
+                }
+                long end = totalLength > 0
+                        ? Math.min(totalLength, nextStart + CHUNK) - 1
+                        : nextStart + CHUNK - 1;
+                byte[] next = fetchRange(nextStart, end);
+                if (next.length == 0) {
+                    return -1;
+                }
+                current = next;
+                nextStart += next.length;
+            }
+        }
+
+        private byte[] fetchRange(long start, long end) throws IOException {
+            IOException last = null;
+            for (int attempt = 0; attempt < 3; attempt++) {
+                Map<String, String> h = new LinkedHashMap<>(baseHeaders);
+                h.put("Range", "bytes=" + start + "-" + end);
+                HttpURLConnection conn = Upstream.openStream(url, h, 6000);
+                try {
+                    int status = conn.getResponseCode();
+                    if (status == 416) {
+                        return new byte[0];
+                    }
+                    if (status != 206 && status != 200) {
+                        throw new IOException("chunk HTTP " + status);
+                    }
+                    return readAll(conn.getInputStream());
+                } catch (IOException e) {
+                    last = e;
+                } finally {
+                    conn.disconnect();
+                }
+            }
+            throw last == null ? new IOException("chunk fetch failed") : last;
+        }
+
+        @Override
+        public void close() {
+            try {
+                if (directBody != null) {
+                    directBody.close();
+                }
+            } catch (IOException ignored) {
+            }
+            if (direct != null) {
+                direct.disconnect();
+            }
+            current = null;
+        }
+    }
+
+    private static long parseContentRangeTotal(String contentRange) {
+        if (contentRange == null) {
+            return -1L;
+        }
+        int slash = contentRange.lastIndexOf('/');
+        if (slash < 0 || slash + 1 >= contentRange.length()) {
+            return -1L;
+        }
+        try {
+            return Long.parseLong(contentRange.substring(slash + 1).trim());
+        } catch (NumberFormatException e) {
+            return -1L;
+        }
+    }
+
+    private static byte[] readAll(InputStream in) throws IOException {
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream(128 * 1024);
+        byte[] buf = new byte[32 * 1024];
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            bos.write(buf, 0, n);
+        }
+        return bos.toByteArray();
+    }
+
+    /**
      * 打开一个分片的上游流。与 {@link #fetchSegmentEx} 的区别是不缓存、不整片读入内存，
      * 适合 2MB 级别的 1080p 分片和低内存设备。
      */
@@ -1146,10 +1305,19 @@ public final class ChannelEngine {
             extra.put("Range", Upstream.headerValueClean(rangeHeader));
         }
         Map<String, String> headers = Upstream.playbackRequestHeaders(playbackHeaders, extra);
-        // 单连接流式转发（对齐 Python 版 proxy.ts 的做法）：
-        // 直接透传 Range，拿到响应头立刻回，之后边读边发。
-        // 曾经这里按 256KB 并行 Range 分块，是为了绕开某台 PC 的出口限速，
-        // 但在正常网络下反而更慢——8 个连接里任何一块卡住，整片就卡住。
+        boolean noRange = rangeHeader == null || rangeHeader.trim().isEmpty();
+        if (noRange) {
+            // 播放器没带 Range：自己按 512KB 切，绕开 CDN 对完整 GET 的限速
+            RangedSegmentInput ranged = new RangedSegmentInput(realUrl, headers);
+            ranged.start();
+            Map<String, String> outHeaders = new LinkedHashMap<>();
+            outHeaders.put("Content-Type", "video/mp2t");
+            if (ranged.totalLength > 0) {
+                outHeaders.put("Content-Length", String.valueOf(ranged.totalLength));
+            }
+            return new SegmentStream(null, ranged, 200, outHeaders, ranged.totalLength);
+        }
+        // 播放器自带 Range：直接透传，边读边发
         HttpURLConnection connection = Upstream.openStream(realUrl, headers, 8000);
         int status;
         try {
