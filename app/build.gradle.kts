@@ -66,9 +66,11 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
 
-    // 播放内核：IJKPlayer（debugly/ijkplayer k0.8.9 预编译 AAR，自带 armeabi-v7a/arm64-v8a .so）。
-    // 替代 Vulkan-only、在无 Vulkan 设备上无法构造的 FSPlayer。
-    implementation(files("libs/ijkplayer-cmake-release.aar"))
+    // 播放内核：Media3 ExoPlayer（HLS）。参考 ysp-live-android 验证过的方案：
+    // 大缓冲 + chunkless 秒开 + 本地代理分片，直播稳定性显著优于 IJK 直连。
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
+    implementation("androidx.media3:media3-ui:1.4.1")
 
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")

@@ -1,65 +1,47 @@
 package com.tivimatelite.player
 
 import android.content.Context
+import android.net.Uri
 import android.view.Surface
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.DefaultLoadControl
 import com.tivimatelite.web.AppLogStore
-import java.util.Locale
-import tv.danmaku.ijk.media.player.IMediaPlayer
-import tv.danmaku.ijk.media.player.IjkMediaPlayer
 
 /**
- * IJKPlayer 内核封装（debugly/ijkplayer k0.8.9 预编译 AAR，替代原 ExoPlayer/Media3、
- * 以及在无 Vulkan 设备上无法构造的 FSPlayer）。
+ * 播放内核：Media3 ExoPlayer（HLS）。移植自 ysp-live-android 验证过的方案。
  *
- * 选项名均已与本项目所用 `app/libs/ijkplayer-cmake-release.aar` 内 `jni/<abi>/libijkplayer.so`
- * 中的字符串逐一核对；category 编号：1=FORMAT, 2=CODEC, 3=SWS, 4=PLAYER。
+ * 相比旧的 IJKPlayer：
+ * - 前向 15s / 后向 30s 缓冲（DefaultLoadControl），抗 CDN 抖动，不再几秒一卡；
+ * - setAllowChunklessPreparation(true) 秒开；
+ * - 分片走本机 8767 代理（引擎缓存 + 稳定取流），不经 IJK 的完整 GET 限速。
  *
- * 与 FSPlayer 不同，此 IJK 构建的安卓渲染后端为 OpenGL ES（无 `libvulkan.so` 依赖），
- * 因此在无 Vulkan 驱动的设备（含 S905L3 机顶盒、MuMu 模拟器）上可正常出画。
+ * 对外 API 保持与原 IJK 版一致，UI / Web 后台 / ChannelSwitcher 无需改动。
  */
 object PlayerManager {
     private const val TAG = "PlayerManager"
 
-    // ---- 播放选项（DIYP 对内 JS 移植而来的 IPTV 播放参数）----
     private const val USER_AGENT = "SYTV/1.6"
-    // 直播不该做深度探测：原来 1MB / 2s 意味着播放器要先读满 1MB 才开始解码，
-    // 网络一慢就是十几秒黑屏。压缩到 256KB / 0.5s，起播快很多。
-    private const val OPT_PROBESIZE = "262144"
-    private const val OPT_ANALYZEDURATION = "500000"
-    private const val OPT_SKIP_LOOP_FILTER = 48L               // 0x30, CODEC 类别
-    private const val OPT_FRAMEDROP = 5L
-    private const val OPT_OVERLAY_FORMAT_RV32 = 842225234L     // SDL_FCC_RV32
+    private const val CONNECT_TIMEOUT_MS = 15_000
+    private const val READ_TIMEOUT_MS = 15_000
+    // 直播稳定性优先：前向 15s、后向 30s
+    private const val BUFFER_FORWARD_MS = 15_000L
+    private const val BUFFER_BACK_MS = 30_000L
 
-    // ---- 音频增益（avfilter）----
-    // 前提：本项目所用 AAR 已启用 avfilter（`af` 选项已注册，volume/alimiter 等滤镜可用；
-    // 旧 AAR 因 ffmpeg 配置带 `--disable-filters` 而没有这些滤镜）。
-    // 不失真增益思路：volume 先把整体电平抬起来，再用 alimiter 做“砖墙”限幅，
-    // 峰值被钳在 0.95(-0.45dBFS) 以内 —— 因此不会发生硬削波（削顶失真）；
-    // level=0 关闭 alimiter 的自动回补，避免自适应增益来回抖动（音量忽大忽小）。
-    // 备选（拉平响度而非单纯提增益）：dynaudnorm=f=250:g=15:p=0.9 —— 自适应、同样无削波风险，
-    // 但对音乐类节目会有轻微“抽气”感，故不作默认。
-    private const val AUDIO_GAIN_FILTER = "volume=%s,alimiter=limit=0.95:attack=5:release=50:level=0"
+    /** 默认音量倍数（1.0 = 原始）。 */
+    const val DEFAULT_AUDIO_GAIN = 1.0f
+    const val AUDIO_GAIN_MIN = 0.5f
+    const val AUDIO_GAIN_MAX = 2.0f
 
-    /** 默认音频增益倍数（1.0 = 原始音量；<=1.0 表示直通、不挂滤镜）。 */
-    const val DEFAULT_AUDIO_GAIN = 1.6f
-
-    /**
-     * 后台可调增益范围（含端点）。下界 1.0：低于原始音量不走本增益链，
-     * 日常音量由电视/遥控控制；上界 3.0 约 +9.5dB，再高只会被 alimiter 压扁、
-     * 白白损失动态范围。Web 后台滑块范围与此保持一致。
-     */
-    const val AUDIO_GAIN_MIN = 1.0f
-    const val AUDIO_GAIN_MAX = 3.0f
-
-    /**
-     * 钳位到后台可调范围。纯函数：不写日志、不触碰 Android API，
-     * 便于被 [com.tivimatelite.web.AudioGainPrefs] 的读写两端同时复用。
-     */
     fun clampAudioGain(value: Float): Float = value.coerceIn(AUDIO_GAIN_MIN, AUDIO_GAIN_MAX)
 
     enum class PlaybackState { IDLE, BUFFERING, READY, ENDED }
 
-    /** 播放事件回调（替代 ExoPlayer 的 Player.Listener）。 */
     interface Events {
         fun onError(errorWhat: Int, errorExtra: Int)
         fun onStateChanged(state: PlaybackState)
@@ -68,15 +50,10 @@ object PlayerManager {
     }
 
     @Volatile
-    private var player: IjkMediaPlayer? = null
+    private var player: ExoPlayer? = null
 
-    /**
-     * 若原生库加载失败（例如 APK 未打包对应 ABI 的 `libijkplayer.so`），构造会抛
-     * `UnsatisfiedLinkError`。一旦失败即置位，避免 channelSwitcher 每换一次源就重建
-     * 播放器导致重试风暴——ABI 缺失不会在运行期自愈。
-     */
     @Volatile
-    private var playerCreationFailed = false
+    private var appContext: Context? = null
 
     @Volatile
     private var events: Events? = null
@@ -96,53 +73,22 @@ object PlayerManager {
     var currentUrl: String? = null
         private set
 
-    /**
-     * 音频增益倍数（线性，1.0 = 原始音量）。IJK 选项须在 prepare 之前设置，
-     * 因此修改后于下一次 [play] 生效。
-     *
-     * 只读对外暴露：全部写入走 [setAudioGain]，保证越界钳位与日志不被绕过。
-     */
     @Volatile
     var audioGain: Float = DEFAULT_AUDIO_GAIN
         private set
 
-    /**
-     * 设置音频增益（越界先钳位再生效）。只更新后续 [play] 会读取的值——
-     * 已在播放的流要重新 prepare 才会套用新滤镜，Web 后台的改动由
-     * `ReadyStallWatch.startAudioGainWatcher` 观察到后触发重播完成生效。
-     */
     fun setAudioGain(value: Float) {
         val clamped = clampAudioGain(value)
         if (audioGain == clamped) return
         audioGain = clamped
         AppLogStore.i(TAG, "audioGain -> $clamped")
+        player?.setVolume(clamped)
     }
 
-    fun getPlayer(context: Context): IjkMediaPlayer? {
-        player?.let { return it }
-        if (playerCreationFailed) return null
-
-        var created: IjkMediaPlayer? = null
-        var failure: Throwable? = null
-        synchronized(this) {
-            created = player
-            if (created == null && !playerCreationFailed) {
-                try {
-                    created = createPlayer().also { player = it }
-                } catch (t: Throwable) {
-                    // 构造失败通常源于原生库加载失败（UnsatisfiedLinkError）。
-                    // 兜住 Error 防止整个 App 崩溃，并置位永久失败标志。
-                    playerCreationFailed = true
-                    failure = t
-                }
-            }
-        }
-
-        failure?.let {
-            AppLogStore.e(TAG, "IjkMediaPlayer 创建失败：原生库加载异常（检查 ABI 是否匹配）", it)
-            events?.onError(IMediaPlayer.MEDIA_ERROR_UNKNOWN, 0)
-        }
-        return created
+    /** 保留原签名以兼容 MainActivity 的 surface 回调；ExoPlayer 构造发生在 play()。 */
+    fun getPlayer(context: Context): ExoPlayer? {
+        appContext = context.applicationContext
+        return player
     }
 
     fun setEvents(value: Events?) {
@@ -150,41 +96,107 @@ object PlayerManager {
     }
 
     fun play(context: Context, url: String, forceHls: Boolean = false) {
-        val p = getPlayer(context) ?: run {
-            AppLogStore.e(TAG, "play() aborted: IjkMediaPlayer 不可用，url=$url")
-            return
-        }
+        appContext = context.applicationContext
         currentUrl = url
         playWhenReady = true
         AppLogStore.i(TAG, "play url=$url forceHls=$forceHls audioGain=$audioGain")
         setState(PlaybackState.BUFFERING)
-        runCatching {
-            p.reset()
-            applyOptions(p)
+
+        // 换台：先释放旧 player，保证旧分片连接立刻断开，首帧更快、避免连接堆积。
+        releaseInternal(resetState = false)
+
+        try {
+            val ctx = appContext ?: context.applicationContext
+            val dataSourceFactory = DefaultHttpDataSource.Factory()
+                .setUserAgent(USER_AGENT)
+                .setConnectTimeoutMs(CONNECT_TIMEOUT_MS)
+                .setReadTimeoutMs(READ_TIMEOUT_MS)
+                .setAllowCrossProtocolRedirects(true)
+
+            val loadControl = DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    (BUFFER_FORWARD_MS + BUFFER_BACK_MS).toInt(),
+                    (BUFFER_FORWARD_MS + BUFFER_BACK_MS).toInt(),
+                    1_500,
+                    3_000
+                )
+                .build()
+
+            val p = ExoPlayer.Builder(ctx)
+                .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+                .setLoadControl(loadControl)
+                .build()
+
+            p.setWakeMode(androidx.media3.common.C.WAKE_MODE_NETWORK)
+            p.setVolume(audioGain)
+            p.addListener(listener)
             currentSurface?.let { p.setSurface(it) }
-            p.setDataSource(url)
-            p.prepareAsync()
-        }.onFailure {
-            AppLogStore.e(TAG, "play() failed for $url", it)
-            events?.onError(IMediaPlayer.MEDIA_ERROR_UNKNOWN, 0)
+
+            val item = MediaItem.fromUri(Uri.parse(url))
+            val source = HlsMediaSource.Factory(dataSourceFactory)
+                .setAllowChunklessPreparation(true)
+                .createMediaSource(item)
+            p.setMediaSource(source)
+            p.playWhenReady = true
+            p.prepare()
+
+            synchronized(this) { player = p }
+        } catch (t: Throwable) {
+            AppLogStore.e(TAG, "play() failed for $url", t)
+            events?.onError(0, 0)
+        }
+    }
+
+    private val listener = object : Player.Listener {
+        override fun onPlaybackStateChanged(state: Int) {
+            when (state) {
+                Player.STATE_BUFFERING -> setState(PlaybackState.BUFFERING)
+                Player.STATE_READY -> setState(PlaybackState.READY)
+                Player.STATE_ENDED -> setState(PlaybackState.ENDED)
+                Player.STATE_IDLE -> {}
+            }
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            events?.onIsPlayingChanged(isPlaying)
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            AppLogStore.w(TAG, "onPlayerError: ${error.message}")
+            setState(PlaybackState.IDLE)
+            events?.onError(error.errorCode, error.errorCodeNumber)
+        }
+
+        override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+            val w = videoSize.width
+            val h = videoSize.height
+            if (w <= 0 || h <= 0) return
+            // ExoPlayer 不直接给 SAR num/den 的整数形式，用 width/height 比例近似传给 UI
+            val sar = w * 1.0f / h
+            events?.onVideoSizeChanged(w, h, sar.toInt(), 1)
         }
     }
 
     fun pause() {
         playWhenReady = false
-        player?.pause()
+        player?.playWhenReady = false
     }
 
     fun release() {
+        releaseInternal(resetState = true)
+    }
+
+    private fun releaseInternal(resetState: Boolean) {
         synchronized(this) {
-            player?.release()
+            player?.let { p ->
+                p.removeListener(listener)
+                p.release()
+            }
             player = null
-            // 释放后允许下次 getPlayer 重新尝试构造（例如 Activity 重建 / App 重启）。
-            playerCreationFailed = false
         }
         currentUrl = null
         playWhenReady = false
-        setState(PlaybackState.IDLE)
+        if (resetState) setState(PlaybackState.IDLE)
     }
 
     fun setSurface(surface: Surface?) {
@@ -194,8 +206,11 @@ object PlayerManager {
 
     fun currentPositionMs(): Long = runCatching { player?.currentPosition ?: 0L }.getOrDefault(0L)
 
-    /** IJK 的视频缓存时长(ms)，作为 bufferedPosition 的近似。 */
-    fun bufferedPositionMs(): Long = runCatching { player?.videoCachedDuration ?: 0L }.getOrDefault(0L)
+    /** ExoPlayer 的已缓冲时长(ms)。 */
+    fun bufferedPositionMs(): Long = runCatching {
+        val p = player ?: return@runCatching 0L
+        (p.bufferedPosition - p.currentPosition).coerceAtLeast(0L)
+    }.getOrDefault(0L)
 
     fun isPlaying(): Boolean = runCatching { player?.isPlaying ?: false }.getOrDefault(false)
 
@@ -204,90 +219,4 @@ object PlayerManager {
         playbackState = next
         events?.onStateChanged(next)
     }
-
-    private fun createPlayer(): IjkMediaPlayer {
-        AppLogStore.i(TAG, "createPlayer: IjkMediaPlayer")
-        val p = IjkMediaPlayer()
-        runCatching { IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_WARN) }
-
-        p.setOnPreparedListener { mp ->
-            AppLogStore.i(TAG, "onPrepared")
-            setState(PlaybackState.READY)
-            runCatching { mp.start() }
-        }
-        p.setOnErrorListener { _, what, extra ->
-            AppLogStore.w(TAG, "onError what=$what extra=$extra")
-            setState(PlaybackState.IDLE)
-            events?.onError(what, extra)
-            true
-        }
-        p.setOnCompletionListener {
-            AppLogStore.i(TAG, "onCompletion")
-            setState(PlaybackState.ENDED)
-        }
-        p.setOnInfoListener { _, what, extra ->
-            when (what) {
-                IMediaPlayer.MEDIA_INFO_BUFFERING_START -> setState(PlaybackState.BUFFERING)
-                IMediaPlayer.MEDIA_INFO_BUFFERING_END -> setState(PlaybackState.READY)
-            }
-            true
-        }
-        p.setOnVideoSizeChangedListener { _, width, height, sarNum, sarDen ->
-            AppLogStore.i(TAG, "videoSize ${width}x$height sar=$sarNum:$sarDen")
-            events?.onVideoSizeChanged(width, height, sarNum, sarDen)
-        }
-        return p
-    }
-
-    /**
-     * IJK 的 IPTV 播放选项：硬解 + 直播低延迟 + 自动重连 + avfilter 音频增益。
-     * 已剔除本 AAR 的 `libijkplayer.so` 未注册的选项（如 `rtsp_flags`/`prefer_tcp`：
-     * 注册名缺失时 `av_opt_set_dict` 会静默忽略，属于无效设置）。
-     */
-    private fun applyOptions(p: IjkMediaPlayer) {
-        // x86 模拟器（MuMu 等）的 MediaCodec 列表里会出现不可用的 qcom 编码器，
-        // IJK 选中后会创建 dummy codec 并直接失败；这种环境强制走 ffmpeg 软解。
-        // 真实机顶盒（ARM）仍然使用硬解。
-        val hardwareDecode = if (isX86Emulator()) 0L else 1L
-        // PLAYER(4)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", hardwareDecode)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-all-videos", hardwareDecode)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-avc", hardwareDecode)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-hevc", hardwareDecode)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg2", hardwareDecode)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-mpeg4", hardwareDecode)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", OPT_FRAMEDROP)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "overlay-format", OPT_OVERLAY_FORMAT_RV32)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
-        // 音频增益：avfilter 链（`af` 同属 PLAYER(4) 类别，仅在 CONFIG_AVFILTER 下注册）
-        buildAudioFilterChain()?.let {
-            p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "af", it)
-        }
-
-        // FORMAT(1)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "user_agent", USER_AGENT)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", OPT_PROBESIZE)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", OPT_ANALYZEDURATION)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1L)
-
-        // CODEC(2)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", OPT_SKIP_LOOP_FILTER)
-    }
-
-    /**
-     * 组装 avfilter 音频增益链：`volume=<gain>,alimiter=...`。
-     *
-     * 返回 null 表示直通：gain<=1.0 时不挂滤镜，避免对本身已足够响的源做无谓限幅。
-     * 语法按 ffmpeg 4.0（本项目 AAR 所用版本）校验，滤镜名与选项均已在 .so 中确认存在。
-     */
-    private fun buildAudioFilterChain(): String? {
-        if (audioGain <= 1.0f) return null
-        val gain = String.format(Locale.US, "%.2f", audioGain)
-        return String.format(Locale.US, AUDIO_GAIN_FILTER, gain)
-    }
-
-    /** 当前设备是否为 x86/x86_64（MuMu 等模拟器）。 */
-    private fun isX86Emulator(): Boolean =
-        android.os.Build.SUPPORTED_ABIS?.any { it.startsWith("x86") } == true
 }

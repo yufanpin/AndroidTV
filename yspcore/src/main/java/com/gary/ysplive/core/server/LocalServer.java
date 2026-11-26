@@ -430,10 +430,11 @@ public final class LocalServer {
                 return;
             }
             String rangeHeader = req.header("range");
-            long sentBytes = 0L;
-            ChannelEngine.SegmentStream stream;
+            // 与 ysp-live-android 一致：走整片缓存（LRU 命中率高、回源一次后续全快），
+            // 弃用旧的流式代理（不写缓存、每次回源、慢分片反复卡顿）。
+            ChannelEngine.SegmentResult seg;
             try {
-                stream = engine.openSegmentStream(realUrl, rangeHeader);
+                seg = engine.fetchSegmentEx(realUrl, rangeHeader);
             } catch (IllegalArgumentException e) {
                 sendText(out, req, 400, e.getMessage() + "\n",
                         "text/plain; charset=utf-8", keepAlive, null);
@@ -443,49 +444,24 @@ public final class LocalServer {
                         "text/plain; charset=utf-8", keepAlive, null);
                 return;
             }
-            try {
-                if (stream.status >= 400) {
-                    byte[] detail = readSmall(stream.body(), 4096);
-                    sendText(out, req, 502,
-                            "Upstream CDN HTTP " + stream.status + ": "
-                                    + new String(detail, java.nio.charset.StandardCharsets.UTF_8) + "\n",
-                            "text/plain; charset=utf-8", keepAlive, null);
-                    return;
-                }
-                if (stream.contentLength > MAX_PROXY_BYTES) {
-                    sendText(out, req, 502, "upstream segment too large\n",
-                            "text/plain; charset=utf-8", keepAlive, null);
-                    return;
-                }
-                StringBuilder head = new StringBuilder(256);
-                head.append("HTTP/1.0 ").append(stream.status).append(' ')
-                        .append(reasonPhrase(stream.status)).append("\r\n");
-                for (Map.Entry<String, String> e : stream.headers.entrySet()) {
-                    head.append(e.getKey()).append(": ").append(e.getValue()).append("\r\n");
-                }
-                head.append("X-Cache: MISS-STREAM\r\n")
-                        .append("Access-Control-Allow-Origin: *\r\n")
-                        .append("Cache-Control: public, max-age=300\r\n")
-                        .append("Connection: close\r\n\r\n");
-                out.write(head.toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
-                if (!req.headOnly) {
-                    byte[] buffer = new byte[64 * 1024];
-                    int n;
-                    while ((n = stream.body().read(buffer)) > 0) {
-                        out.write(buffer, 0, n);
-                        sentBytes += n;
-                    }
-                }
-            } catch (java.net.SocketException | java.io.EOFException ignored) {
-                // 播放器主动断开
-            } finally {
-                stream.close();
-                double costMs = (System.nanoTime() - proxyStartNs) / 1_000_000.0;
-                if (costMs > 1500.0) {
-                    // 慢分片是卡顿的直接证据：CDN 回源、连接被掐、或上游限速
-                    Log.w(TAG, "慢分片 " + (int) costMs + "ms / " + sentBytes + "B / HTTP "
-                            + stream.status + " / " + tailOf(realUrl, 56), 3.0);
-                }
+            if (seg.data.length > MAX_PROXY_BYTES) {
+                sendText(out, req, 502, "upstream segment too large\n",
+                        "text/plain; charset=utf-8", keepAlive, null);
+                return;
+            }
+            Map<String, String> headers = new LinkedHashMap<>(seg.headers);
+            headers.put("X-Cache", seg.cacheState);
+            headers.put("Access-Control-Allow-Origin", "*");
+            headers.put("Cache-Control", "public, max-age=300");
+            String ctype = Upstream.headerOrNull(seg.headers, "content-type");
+            if (ctype == null || ctype.isEmpty()) {
+                ctype = "video/mp2t";
+            }
+            writeResponse(out, seg.status, ctype, seg.data, req.headOnly, keepAlive, headers, true);
+            double costMs = (System.nanoTime() - proxyStartNs) / 1_000_000.0;
+            if (costMs > 1500.0) {
+                Log.w(TAG, "慢分片 " + (int) costMs + "ms / " + seg.data.length + "B / "
+                        + seg.cacheState + " / " + tailOf(realUrl, 56), 3.0);
             }
         }
 
