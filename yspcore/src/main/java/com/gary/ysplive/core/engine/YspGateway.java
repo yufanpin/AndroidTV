@@ -111,9 +111,8 @@ public final class YspGateway implements Gateway {
             stage(config.disableHighBitrate
                     ? "1080p 模式（已关闭高码率）"
                     : "正在注册设备身份，准备高码率通道…");
-            // 解析器启动是异步的；不阻塞端口服务，让界面立刻可用（先出 1080p）。
-            // 关闭高码率时不注册设备身份，既省内存也避免触发上游风控。
-            if (dev != null && !config.disableHighBitrate) {
+            // 解析器启动是异步的；不阻塞端口服务，让界面立刻可用（先出 1080p）
+            if (dev != null) {
                 try {
                     dev.start();
                 } catch (RuntimeException e) {

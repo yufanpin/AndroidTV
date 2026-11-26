@@ -414,7 +414,6 @@ public final class LocalServer {
 
         private void handleProxyTs(Request req, OutputStream out, String rawPath, boolean keepAlive)
                 throws IOException {
-            long proxyStartNs = System.nanoTime();
             String token = Upstream.proxyTsToken(rawPath);
             if (token == null || token.isEmpty()) {
                 sendText(out, req, 400, "missing proxy ts token\n",
@@ -430,8 +429,6 @@ public final class LocalServer {
                 return;
             }
             String rangeHeader = req.header("range");
-            // 与 ysp-live-android 一致：走整片缓存（LRU 命中率高、回源一次后续全快），
-            // 弃用旧的流式代理（不写缓存、每次回源、慢分片反复卡顿）。
             ChannelEngine.SegmentResult seg;
             try {
                 seg = engine.fetchSegmentEx(realUrl, rangeHeader);
@@ -458,32 +455,6 @@ public final class LocalServer {
                 ctype = "video/mp2t";
             }
             writeResponse(out, seg.status, ctype, seg.data, req.headOnly, keepAlive, headers, true);
-            double costMs = (System.nanoTime() - proxyStartNs) / 1_000_000.0;
-            if (costMs > 1500.0) {
-                Log.w(TAG, "慢分片 " + (int) costMs + "ms / " + seg.data.length + "B / "
-                        + seg.cacheState + " / " + tailOf(realUrl, 56), 3.0);
-            }
-        }
-
-        /** 取 URL 尾部用于日志定位（分片名即可区分）。 */
-        private static String tailOf(String url, int keep) {
-            if (url == null) {
-                return "";
-            }
-            return url.length() <= keep ? url : url.substring(url.length() - keep);
-        }
-
-        private static byte[] readSmall(InputStream in, int limit) {
-            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream(Math.min(limit, 512));
-            try {
-                byte[] buf = new byte[512];
-                int n;
-                while (bos.size() < limit && (n = in.read(buf)) > 0) {
-                    bos.write(buf, 0, Math.min(n, limit - bos.size()));
-                }
-            } catch (IOException ignored) {
-            }
-            return bos.toByteArray();
         }
 
         private void handleEngineProxy(Request req, OutputStream out, String query, boolean keepAlive)

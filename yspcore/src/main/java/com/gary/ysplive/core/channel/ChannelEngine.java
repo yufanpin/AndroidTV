@@ -9,9 +9,6 @@ import com.gary.ysplive.core.spi.ResolutionException;
 import com.gary.ysplive.core.spi.Resolver;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -19,14 +16,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 频道刷新引擎：拥有全部 {@link Channel} 实例、控制面限速器、分片缓存，
@@ -46,47 +37,22 @@ public final class ChannelEngine {
 
     private static final String TAG = "engine";
 
-    /**
-     * 刷新间隔（秒），与 Python 版 {@code REFRESH_INTERVAL = 5} 对齐。
-     * <p>必须明显小于播放列表覆盖时长（14 片 × 5s ≈ 70s）：原来 60s 的间隔意味着
-     * 播完列表还得干等下一次刷新，表现就是周期性卡顿。
-     */
-    public static final int REFRESH_INTERVAL = 5;
+    /** 刷新间隔（秒），Python {@code REFRESH_INTERVAL}。 */
+    public static final int REFRESH_INTERVAL = 10;
     /** 空闲多少秒后停止后台拉流，Python {@code IDLE_TIMEOUT}。 */
     public static final int IDLE_TIMEOUT = 120;
-    /** 分片缓存超过这个年龄才允许清空重拉（必须大于 REFRESH_INTERVAL）。 */
-    public static final int CACHE_STALE_SEC = 300;
     /** 设备链接空闲回收窗口（秒），Python {@code LINK_IDLE_TIMEOUT}。 */
     public static final double LINK_IDLE_TIMEOUT = 15.0;
-    /**
-     * JCE 时移窗口起点偏移（秒），Python {@code JCE_LIVE_PAST_SEC = 120}。
-     * <p>这个窗口不是「回看 5 分钟」，而是请求一个从 120s 前一直延伸到未来的
-     * 直播流入口：签一次名就能持续拉到新分片。
-     */
-    public static final int JCE_LIVE_PAST_SEC = 120;
-    /** JCE 时移窗口终点偏移（秒），Python {@code JCE_LIVE_FUTURE_SEC = 900}。 */
-    public static final int JCE_LIVE_FUTURE_SEC = 900;
-    /**
-     * 时移 URL 软过期（秒），Python {@code JCE_LIVE_SOFT_TTL_SEC = 810}。
-     * <p>签一次名复用 13.5 分钟。签名接口有频率限制，
-     * 每次刷新都重新签必然触发「您的操作过于频繁」。
-     */
-    public static final double JCE_LIVE_SOFT_TTL_SEC = 810.0;
-    /** 时移 URL 硬过期（秒），Python {@code JCE_LIVE_HARD_TTL_SEC = 885}。 */
-    public static final double JCE_LIVE_HARD_TTL_SEC = 885.0;
+    /** JCE 时移窗口（秒），Python {@code WINDOW}。 */
+    public static final int WINDOW = 300;
     /** 分片队列上限，Python {@code MAX_SEGS}。 */
     public static final int MAX_SEGS = 120;
     /** bkliveinfo 地址缓存 TTL（秒），Python {@code BK_URL_TTL}。 */
     public static final int BK_URL_TTL = 300;
-    /**
-     * SWR 缓存窗口（秒）。Python 里是 {@code cached_age < 5.0} 的硬编码判定，
-     * 且默认 {@code stale_while_refresh_ttl = 0} —— 宁可直接同步重建，也不拿过期列表。
-     * <p>这个值必须 ≤ {@link #REFRESH_INTERVAL}：超过刷新间隔还返回缓存，
-     * 等于把「已经播完的列表」继续喂给播放器，必然卡住。
-     */
-    public static final double SWR_TTL_SEC = 5.0;
-    /** 超过这个年龄就顺手触发后台刷新。 */
-    public static final double SWR_REFRESH_AFTER_SEC = 2.0;
+    /** SWR 缓存窗口（秒）：Python 里是硬编码的 15.0。 */
+    public static final double SWR_TTL_SEC = 15.0;
+    /** 超过这个年龄就顺手触发后台刷新（Python 是 6.0）。 */
+    public static final double SWR_REFRESH_AFTER_SEC = 6.0;
     /**
      * 同一频道两次"bk 候选 CDN 轮换"的最小间隔（秒）。
      * <p>限流目的：真死的频道不能被打成无限重试；而正常的坏 CDN 一次轮换后就能恢复。
@@ -94,21 +60,6 @@ public final class ChannelEngine {
     public static final double BK_ROTATE_MIN_INTERVAL_SEC = 20.0;
     /** bk 候选探活时检查多少个分片（分片可用性按片变化，只探首片会误杀）。 */
     private static final int PROBE_SEG_COUNT = 3;
-    /**
-     * JCE 触发“操作过于频繁”后的全局冷却时间。
-     * <p>对齐 Python {@code JCE_COOLDOWN_SEC = 10.25}：真正的修复是复用 URL 不再频繁签名，
-     * 冷却只是兜底，设太长反而会让一次偶发限流拖成整分钟的黑屏。
-     */
-    /**
-     * 分片直连 CDN（不经过本机 /proxy.ts）。
-     * <p>实测：央视频 CDN 对「完整 GET（无 Range）」严重限速（2MB 分片要 20–40s，
-     * IJK 默认发完整 GET，必然在加载超时内起不来）；而对 Range 请求可达数 MB/s。
-     * 播放器无法自带 Range 分片下载，必须走本机 /proxy.ts：由引擎把每片切成
-     * 512KB 分块并行 Range 取回流式喂给播放器。故默认关闭直连。
-     */
-    private static final boolean DIRECT_CDN_SEGMENTS = false;
-
-    private static final long JCE_RATE_LIMIT_COOLDOWN_MS = 10_250L;
 
     /** 一次 m3u8 响应的完整信息（供 HTTP 层直接写 socket）。 */
     public static final class PlaylistResult {
@@ -175,9 +126,6 @@ public final class ChannelEngine {
     private final Object inflightLock = new Object();
 
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
-    /** 全局 JCE 限流冷却截止时间（毫秒）。 */
-    private final java.util.concurrent.atomic.AtomicLong jceCooldownUntilMs =
-            new java.util.concurrent.atomic.AtomicLong(0L);
     private final long startedAtMs = System.currentTimeMillis();
     private volatile Boolean resolverReadyOverride;
     private volatile UpstreamHook upstreamHook;
@@ -237,6 +185,26 @@ public final class ChannelEngine {
         synchronized (channelsLock) {
             return new ArrayList<>(channels.values());
         }
+    }
+
+    /**
+     * 切台时停掉旧频道的后台刷新，避免它继续消耗上游限流配额，
+     * 把新频道的首次请求挤进"操作过于频繁"。（从旧版 core 保留，供 app 的 YspEngine 调用）
+     */
+    public void stopChannel(String slug) {
+        Channel ch = channelFor(slug);
+        if (ch == null) return;
+        Thread thread = ch.thread();
+        if (thread != null) {
+            thread.interrupt();
+        }
+        ch.setThread(null);
+        ch.setStarting(false);
+        ch.setLastAccess(0.0);
+        synchronized (ch.lock()) {
+            ch.clearBuffer();
+        }
+        Log.i(TAG, "[" + slug + "] 已停止后台刷新（切台）", 5.0);
     }
 
     /**
@@ -468,58 +436,13 @@ public final class ChannelEngine {
         return parseJceText(text, ch);
     }
 
-    /**
-     * 真实网络路径：复用/更换时移地址 → 拉播放列表。
-     * <p>对齐 Python {@code jce_fetch}：签一次名复用 810s。早先每次刷新都重新签名，
-     * 结果是每 5s 撞一次「您的操作过于频繁」，列表停止更新、播放器播完就断流。
-     */
+    /** 真实网络路径：限速 → 换时移地址 → 拉播放列表。 */
     private String jceFetchReal(Channel ch) throws Exception {
-        long nowMs = System.currentTimeMillis();
-        double now = Channel.nowSec();
-        String cached = ch.jceM3u8Url();
-        boolean hasCached = cached != null && !cached.isEmpty();
-
-        if (!hasCached || now >= ch.jceUrlSoftExpire()) {
-            long cooldownUntil = jceCooldownUntilMs.get();
-            boolean cooling = nowMs < cooldownUntil;
-            // 冷却期内如果硬缓存还活着，就继续用它：宁可复用旧 URL，
-            // 也不去撞签名接口，否则限流只会越滚越长。
-            boolean hardReusable = hasCached && cooling && now < ch.jceUrlHardExpire();
-            if (cooling && !hardReusable) {
-                throw new IOException("JCE 限流冷却中，剩余 "
-                        + ((cooldownUntil - nowMs) / 1000) + "s");
-            }
-            if (!hardReusable) {
-                flowLimiter.waitSlot();
-                long nowSec = nowMs / 1000L;
-                String url = Upstream.jceTimeshiftUrl(ch.pid(), ch.sid(),
-                        nowSec - JCE_LIVE_PAST_SEC, nowSec + JCE_LIVE_FUTURE_SEC, ch.defn());
-                ch.setJceM3u8Url(url);
-                ch.setJceUrlSoftExpire(now + JCE_LIVE_SOFT_TTL_SEC);
-                ch.setJceUrlHardExpire(now + JCE_LIVE_HARD_TTL_SEC);
-                Log.i(TAG, "[" + ch.slug() + "] 时移地址已更新，"
-                        + (int) JCE_LIVE_SOFT_TTL_SEC + "s 内复用", 30.0);
-            }
-        }
-
-        String m3u8Url = ch.jceM3u8Url();
-        try {
-            return Upstream.fetchJcePlaylist(m3u8Url);
-        } catch (IllegalArgumentException e) {
-            String message = e.getMessage();
-            boolean rateLimited = message != null
-                    && (message.contains("频繁") || message.contains("35005"));
-            if (rateLimited) {
-                // 这个 URL 已经不被接受了：丢掉缓存，让下次重新签名
-                ch.setJceM3u8Url("");
-                ch.setJceUrlSoftExpire(0);
-                ch.setJceUrlHardExpire(0);
-                jceCooldownUntilMs.set(System.currentTimeMillis() + JCE_RATE_LIMIT_COOLDOWN_MS);
-                Log.i(TAG, "[" + ch.slug() + "] JCE 触发限流，全局冷却 "
-                        + (JCE_RATE_LIMIT_COOLDOWN_MS / 1000) + "s", 10.0);
-            }
-            throw e;
-        }
+        flowLimiter.waitSlot();
+        long now = System.currentTimeMillis() / 1000L;
+        String m3u8Url = Upstream.jceTimeshiftUrl(
+                ch.pid(), ch.sid(), now - WINDOW, now, ch.defn());
+        return Upstream.fetchJcePlaylist(m3u8Url);
     }
 
     /** 把 JCE 播放列表文本解析成分片序列（相对地址已在上游被 join 成绝对地址）。 */
@@ -727,33 +650,9 @@ public final class ChannelEngine {
                 ch.buildPlaylist(true);
             }
             fails = ok ? 0 : fails + 1;
-            // 失败时快速重试（2/4/8/16s，封顶 30s）：上游卡顿往往是几秒的事，
-            // 原来一次失败就退避 30-60s，等于把「抖动」放大成「播完列表还没恢复」。
-            sleepQuietly(fails == 0
-                    ? REFRESH_INTERVAL * 1000L
-                    : Math.min(30_000L, 2000L << Math.min(fails - 1, 3)));
+            sleepQuietly((fails < 3 ? REFRESH_INTERVAL : 30) * 1000L);
         }
         Log.i(TAG, "[" + ch.slug() + "] 空闲超时，已停止后台拉取", 10.0);
-    }
-
-    /**
-     * 切台时停掉旧频道的后台刷新，避免它继续消耗上游限流配额，
-     * 把新频道的首次请求挤进“操作过于频繁”。
-     */
-    public void stopChannel(String slug) {
-        Channel ch = channelFor(slug);
-        if (ch == null) return;
-        Thread thread = ch.thread();
-        if (thread != null) {
-            thread.interrupt();
-        }
-        ch.setThread(null);
-        ch.setStarting(false);
-        ch.setLastAccess(0);
-        synchronized (ch.lock()) {
-            ch.clearBuffer();
-        }
-        Log.i(TAG, "[" + slug + "] 已停止后台刷新（切台）", 5.0);
     }
 
     /**
@@ -776,7 +675,7 @@ public final class ChannelEngine {
             } else {
                 waitOnly = false;
                 threadDead = ch.threadDead();
-                boolean cacheStale = (now - ch.lastOk() > CACHE_STALE_SEC)
+                boolean cacheStale = (now - ch.lastOk() > IDLE_TIMEOUT)
                         || (!ch.hasSegments() && ch.bkPlaylist().isEmpty());
                 if (cacheStale) {
                     ch.clearBuffer();
@@ -897,16 +796,12 @@ public final class ChannelEngine {
         if (catchup != null && ChannelTable.supportsTimeshift(canonical)) {
             String pl = timeshiftPlaylist(ch, catchup);
             if (pl != null) {
-                return new PlaylistResult(200, directSegments(pl, scheme, host),
-                        "application/vnd.apple.mpegurl", null);
+                return new PlaylistResult(200, pl, "application/vnd.apple.mpegurl", null);
             }
         }
 
-        // 2) 设备协议（高码率）。disableHighBitrate / only4k 在这里真正生效。
-        boolean deviceAllowed = !config.disableHighBitrate
-                && (!config.only4kHighBitrate || ChannelTable.isTrue4k(canonical));
-        if (deviceAllowed && ChannelTable.isBackendChannel(canonical)
-                && resolverReady() && resolver != null) {
+        // 2) 设备协议（高码率）
+        if (ChannelTable.isBackendChannel(canonical) && resolverReady() && resolver != null) {
             if (!resolver.isChannelInCooldown(canonical)) {
                 try {
                     String pl = devicePlaylist(ch, host, scheme);
@@ -955,8 +850,7 @@ public final class ChannelEngine {
             if (cachedAge > SWR_REFRESH_AFTER_SEC) {
                 triggerBackgroundRefresh(ch);
             }
-            return new PlaylistResult(200, directSegments(cachedPl, scheme, host),
-                    "application/vnd.apple.mpegurl", headers);
+            return new PlaylistResult(200, cachedPl, "application/vnd.apple.mpegurl", headers);
         }
 
         // 4) 1080p 备用通道
@@ -974,8 +868,7 @@ public final class ChannelEngine {
             if (Channel.SOURCE_DEVICE.equals(prevSrc)) {
                 pl = Upstream.injectHlsDiscontinuity(pl);
             }
-            return new PlaylistResult(200, directSegments(pl, scheme, host),
-                    "application/vnd.apple.mpegurl", null);
+            return new PlaylistResult(200, pl, "application/vnd.apple.mpegurl", null);
         }
 
         // 5) 上游引擎（兼容另一个本地 ysp-live 的 8787 引擎）
@@ -991,44 +884,6 @@ public final class ChannelEngine {
         String body = "频道 " + ch.name() + " 暂无数据 ("
                 + (err.isEmpty() ? "拉取中" : err) + "), 请稍后重试\n";
         return new PlaylistResult(503, body, "text/plain; charset=utf-8", null);
-    }
-
-    /**
-     * 把播放列表里的分片地址改写成本机 {@code /proxy.ts} 代理。
-     * <p>原因：部分 CDN 只对 IPv6 可达/直连不稳，而播放器在本机走 IPv4 回环最稳；
-     * 同时引擎侧可以做统一 UA、Range 与内存缓存。
-     */
-    /**
-     * 分片地址是否改写成本机代理。
-     * <p>JCE / BK 的分片是公开 CDN 地址，播放器可以直连：实测直连 2.7MB/s，
-     * 而绕引擎代理只有 0.09MB/s，差 30 倍。只有设备协议（高码率）的分片
-     * 需要签名头，才必须走 /proxy.ts。
-     */
-    private String directSegments(String playlist, String proto, String host) {
-        if (DIRECT_CDN_SEGMENTS) {
-            return playlist;
-        }
-        return proxySegments(playlist, proto, host);
-    }
-
-    private String proxySegments(String playlist, String proto, String host) {
-        if (playlist == null || playlist.isEmpty() || playlist.contains("/proxy.ts?")) {
-            return playlist;
-        }
-        String origin = proto + "://" + host;
-        StringBuilder out = new StringBuilder(playlist.length() + 256);
-        String[] lines = playlist.split("\n", -1);
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (!trimmed.isEmpty() && !trimmed.startsWith("#")
-                    && (trimmed.startsWith("http://") || trimmed.startsWith("https://"))) {
-                out.append(origin).append("/proxy.ts?=")
-                        .append(Upstream.encodeProxyTsUrl(trimmed)).append('\n');
-            } else {
-                out.append(line).append('\n');
-            }
-        }
-        return out.toString();
     }
 
     /**
@@ -1116,382 +971,6 @@ public final class ChannelEngine {
 
     // ------------------------------------------------------------------ 分片代理
 
-    /** 流式分片：不整体入内存，直接边下边发给播放器。 */
-    public static final class SegmentStream implements java.io.Closeable {
-        public final int status;
-        public final Map<String, String> headers;
-        public final long contentLength;
-        private final HttpURLConnection connection;
-        private final InputStream body;
-
-        SegmentStream(HttpURLConnection connection, InputStream body, int status,
-                      Map<String, String> headers, long contentLength) {
-            this.connection = connection;
-            this.body = body;
-            this.status = status;
-            this.headers = headers;
-            this.contentLength = contentLength;
-        }
-
-        public InputStream body() {
-            return body;
-        }
-
-        @Override
-        public void close() {
-            try {
-                body.close();
-            } catch (IOException ignored) {
-            }
-            if (connection != null) {
-                connection.disconnect();
-            }
-        }
-    }
-
-    /**
-     * 按 512KB Range 分块 + 并行预取取流。
-     * <p>央视频 CDN 对「无 Range 的完整 GET」严重限速（实测 2MB 分片要 20–40s），
-     * 但对 Range 请求可达数 MB/s（单连接实测 7MB/s）。播放器直连发完整 GET 必然卡，
-     * 所以经本机 /proxy.ts 由引擎按块并行取回流。
-     * <p>策略：首块走单连接同步拉取（起播只等这一块）；之后维持 WINDOW 个并发 Range
-     * 请求作流水线预取：{@link #submitWindow()} 非阻塞补齐在途请求，
-     * {@link #awaitFirst()} 只等队首一块就绪就立刻喂给播放器，其余块后台继续下载。
-     * 每块独立建连、独立重试（最多 3 次），卡住最多损失 512KB，不拖死整片。
-     */
-    static final class RangedSegmentInput extends InputStream {
-        private static final int CHUNK = 512 * 1024;
-        /** 在途并发 Range 请求上限。 */
-        private static final int WINDOW = 4;
-        /** 共享取流线程池规模。 */
-        private static final int SEGMENT_WORKERS = 6;
-        private static volatile ExecutorService segmentPool;
-        private static final AtomicInteger segmentSeq = new AtomicInteger();
-
-        private static ExecutorService pool() {
-            ExecutorService p = segmentPool;
-            if (p == null) {
-                synchronized (RangedSegmentInput.class) {
-                    p = segmentPool;
-                    if (p == null) {
-                        p = Executors.newFixedThreadPool(SEGMENT_WORKERS, new ThreadFactory() {
-                            @Override
-                            public Thread newThread(Runnable r) {
-                                Thread t = new Thread(r, "ysp-seg-" + segmentSeq.incrementAndGet());
-                                t.setDaemon(true);
-                                return t;
-                            }
-                        });
-                        segmentPool = p;
-                    }
-                }
-            }
-            return p;
-        }
-
-        private final String url;
-        private final Map<String, String> baseHeaders;
-        /** 已提交、下载中或已就绪的分块请求（按序），队首即下一块要消费的数据。 */
-        private final ArrayDeque<Future<byte[]>> pending = new ArrayDeque<>();
-        private byte[] current;
-        private int offset;
-        private long nextStart;
-        /** 下一个待提交分块的起始位置（与已消费位置 nextStart 区分）。 */
-        private long submittedEnd;
-        long totalLength = -1L;
-        private boolean finished;
-        /** CDN 不支持 Range（回 200）时退化成直读这条连接。 */
-        private HttpURLConnection direct;
-        private InputStream directBody;
-
-        RangedSegmentInput(String url, Map<String, String> baseHeaders) {
-            this.url = url;
-            this.baseHeaders = baseHeaders;
-        }
-
-        void start() throws IOException {
-            Map<String, String> h = new LinkedHashMap<>(baseHeaders);
-            h.put("Range", "bytes=0-" + (CHUNK - 1));
-            HttpURLConnection conn = Upstream.openStream(url, h, 6000);
-            int status;
-            try {
-                status = conn.getResponseCode();
-            } catch (IOException e) {
-                conn.disconnect();
-                throw e;
-            }
-            if (status == 200) {
-                totalLength = conn.getContentLengthLong();
-                direct = conn;
-                directBody = conn.getInputStream();
-                nextStart = -1;
-                return;
-            }
-            if (status != 206) {
-                conn.disconnect();
-                throw new IOException("upstream HTTP " + status);
-            }
-            totalLength = parseContentRangeTotal(conn.getHeaderField("Content-Range"));
-            byte[] first;
-            try {
-                first = readAll(conn.getInputStream());
-            } finally {
-                conn.disconnect();
-            }
-            long expected = totalLength > 0 ? Math.min((long) CHUNK, totalLength) : first.length;
-            if (first.length != expected) {
-                first = fetchRange(0, expected - 1);
-            }
-            if (first.length == 0) {
-                finished = true;
-                return;
-            }
-            current = first;
-            offset = 0;
-            nextStart = first.length;
-            submittedEnd = nextStart;
-            if (totalLength > 0 && nextStart >= totalLength) {
-                finished = true;
-            } else {
-                // 首块到手后立即启动后续窗口的后台预取
-                submitWindow();
-            }
-        }
-
-        @Override
-        public int read() throws IOException {
-            byte[] one = new byte[1];
-            int n = read(one, 0, 1);
-            return n <= 0 ? -1 : one[0] & 0xFF;
-        }
-
-        @Override
-        public int read(byte[] b, int off, int len) throws IOException {
-            while (true) {
-                if (current != null && offset < current.length) {
-                    int n = Math.min(len, current.length - offset);
-                    System.arraycopy(current, offset, b, off, n);
-                    offset += n;
-                    return n;
-                }
-                if (directBody != null) {
-                    return directBody.read(b, off, len);
-                }
-                current = null;
-                offset = 0;
-                if (finished && pending.isEmpty()) {
-                    return -1;
-                }
-                // 补齐在途窗口（非阻塞），只等队首一块就绪就立即返回给播放器
-                submitWindow();
-                if (pending.isEmpty()) {
-                    return -1;
-                }
-                byte[] next = awaitFirst();
-                if (next.length == 0) {
-                    finished = true;
-                    return -1;
-                }
-                current = next;
-            }
-        }
-
-        /** 非阻塞地把在途请求补到 WINDOW 个。后台线程并行下载，消费线程不等齐。 */
-        private void submitWindow() {
-            if (directBody != null || finished) {
-                return;
-            }
-            long s = submittedEnd;
-            while (pending.size() < WINDOW) {
-                if (totalLength > 0 && s >= totalLength) {
-                    break;
-                }
-                final long end = totalLength > 0 ? Math.min(totalLength, s + CHUNK) - 1 : s + CHUNK - 1;
-                final long fs = s;
-                pending.addLast(pool().submit(() -> fetchRange(fs, end)));
-                s = end + 1;
-            }
-            submittedEnd = s;
-        }
-
-        /** 只等队首一块下载完成；其余块仍在后台并行下载，不阻塞播放器。 */
-        private byte[] awaitFirst() throws IOException {
-            Future<byte[]> f = pending.removeFirst();
-            byte[] data;
-            try {
-                data = f.get();
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                throw new IOException("segment prefetch interrupted", ie);
-            } catch (ExecutionException ee) {
-                Throwable c = ee.getCause();
-                if (c instanceof IOException) {
-                    throw (IOException) c;
-                }
-                throw new IOException("segment prefetch failed", c);
-            }
-            nextStart += data.length;
-            if (totalLength > 0 && nextStart >= totalLength) {
-                finished = true;
-            }
-            return data;
-        }
-
-        private byte[] fetchRange(long start, long end) throws IOException {
-            IOException last = null;
-            for (int attempt = 0; attempt < 3; attempt++) {
-                Map<String, String> h = new LinkedHashMap<>(baseHeaders);
-                h.put("Range", "bytes=" + start + "-" + end);
-                HttpURLConnection conn = Upstream.openStream(url, h, 6000);
-                try {
-                    int status = conn.getResponseCode();
-                    if (status == 416) {
-                        return new byte[0];
-                    }
-                    if (status != 206 && status != 200) {
-                        throw new IOException("chunk HTTP " + status);
-                    }
-                    byte[] body = readAll(conn.getInputStream());
-                    if (status == 200 && body.length > end - start + 1) {
-                        // CDN 忽略了 Range 返回完整文件：按请求区间截取，避免数据错位
-                        int from = (int) start;
-                        int to = (int) Math.min(body.length, end + 1);
-                        if (from >= body.length || to <= from) {
-                            return new byte[0];
-                        }
-                        byte[] slice = new byte[to - from];
-                        System.arraycopy(body, from, slice, 0, slice.length);
-                        return slice;
-                    }
-                    return body;
-                } catch (IOException e) {
-                    last = e;
-                } finally {
-                    conn.disconnect();
-                }
-            }
-            throw last == null ? new IOException("chunk fetch failed") : last;
-        }
-
-        @Override
-        public void close() {
-            try {
-                if (directBody != null) {
-                    directBody.close();
-                }
-            } catch (IOException ignored) {
-            }
-            if (direct != null) {
-                direct.disconnect();
-            }
-            current = null;
-            for (Future<byte[]> f : pending) {
-                f.cancel(true);
-            }
-            pending.clear();
-            finished = true;
-        }
-    }
-
-    private static long parseContentRangeTotal(String contentRange) {
-        if (contentRange == null) {
-            return -1L;
-        }
-        int slash = contentRange.lastIndexOf('/');
-        if (slash < 0 || slash + 1 >= contentRange.length()) {
-            return -1L;
-        }
-        try {
-            return Long.parseLong(contentRange.substring(slash + 1).trim());
-        } catch (NumberFormatException e) {
-            return -1L;
-        }
-    }
-
-    private static byte[] readAll(InputStream in) throws IOException {
-        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream(128 * 1024);
-        byte[] buf = new byte[32 * 1024];
-        int n;
-        while ((n = in.read(buf)) > 0) {
-            bos.write(buf, 0, n);
-        }
-        return bos.toByteArray();
-    }
-
-    /**
-     * 打开一个分片的上游流。与 {@link #fetchSegmentEx} 的区别是不缓存、不整片读入内存，
-     * 适合 2MB 级别的 1080p 分片和低内存设备。
-     */
-    public SegmentStream openSegmentStream(String realUrl, String rangeHeader) throws IOException {
-        if (realUrl == null || realUrl.isEmpty()) {
-            throw new IllegalArgumentException("empty ts url");
-        }
-        String scheme = UrlX.schemeOf(realUrl);
-        if (!"http".equals(scheme) && !"https".equals(scheme)) {
-            throw new IllegalArgumentException("invalid ts scheme: " + scheme);
-        }
-        Map<String, String> playbackHeaders = new LinkedHashMap<>();
-        if (resolver != null) {
-            try {
-                Map<String, String> h = resolver.playbackHeadersForTsUrl(realUrl);
-                if (h != null) playbackHeaders.putAll(h);
-            } catch (ResolutionException e) {
-                throw new IOException("取分片签名头失败: " + e.getMessage(), e);
-            }
-        }
-        Map<String, String> extra = new LinkedHashMap<>();
-        if (rangeHeader != null && !rangeHeader.trim().isEmpty()) {
-            extra.put("Range", Upstream.headerValueClean(rangeHeader));
-        }
-        Map<String, String> headers = Upstream.playbackRequestHeaders(playbackHeaders, extra);
-        boolean noRange = rangeHeader == null || rangeHeader.trim().isEmpty();
-        if (noRange) {
-            // 播放器没带 Range：自己按 512KB 切，绕开 CDN 对完整 GET 的限速
-            RangedSegmentInput ranged = new RangedSegmentInput(realUrl, headers);
-            ranged.start();
-            Map<String, String> outHeaders = new LinkedHashMap<>();
-            outHeaders.put("Content-Type", "video/mp2t");
-            if (ranged.totalLength > 0) {
-                outHeaders.put("Content-Length", String.valueOf(ranged.totalLength));
-            }
-            return new SegmentStream(null, ranged, 200, outHeaders, ranged.totalLength);
-        }
-        // 播放器自带 Range：直接透传，边读边发
-        HttpURLConnection connection = Upstream.openStream(realUrl, headers, 8000);
-        int status;
-        try {
-            status = connection.getResponseCode();
-        } catch (IOException e) {
-            connection.disconnect();
-            throw e;
-        }
-        Map<String, String> pass = new LinkedHashMap<>();
-        for (Map.Entry<String, List<String>> e : connection.getHeaderFields().entrySet()) {
-            String k = e.getKey();
-            if (k == null || e.getValue() == null || e.getValue().isEmpty()) continue;
-            String lower = k.toLowerCase(Locale.ROOT);
-            if (lower.equals("content-type") || lower.equals("content-range")
-                    || lower.equals("accept-ranges") || lower.equals("content-length")) {
-                pass.put(k, e.getValue().get(0));
-            }
-        }
-        long length = -1L;
-        String cl = Upstream.headerOrNull(pass, "content-length");
-        if (cl != null) {
-            try {
-                length = Long.parseLong(cl.trim());
-            } catch (NumberFormatException ignored) {
-                length = -1L;
-            }
-        }
-        InputStream body = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-        if (body == null) {
-            connection.disconnect();
-            throw new IOException("empty upstream body, HTTP " + status);
-        }
-        return new SegmentStream(connection, body, status, pass, length);
-    }
-
     /**
      * 取一个 TS 分片（{@code /proxy.ts} 的实现核心）。
      * <p>无 Range 时先查 {@link TsSegmentCache}，未命中再请求上游并在 200 时回填缓存。
@@ -1543,35 +1022,7 @@ public final class ChannelEngine {
         Map<String, String> headers = Upstream.playbackRequestHeaders(playbackHeaders, extra);
 
         // 3) 请求上游
-        //    央视频 CDN 对「完整 GET（无 Range）」严重限速（实测 2MB 分片要 40s+），
-        //    播放器 ExoPlayer 的 15s read timeout 必然等不到 → 一直 BUFFERING 无首帧。
-        //    所以无 Range 时用 RangedSegmentInput 按 512KB 分块并行 Range 取流（数 MB/s），
-        //    再聚合成整片返回；有 Range 才走原始单连接透传。
-        Upstream.Resp resp;
-        if (!hasRange) {
-            Map<String, String> rangedHeaders = new LinkedHashMap<>(headers);
-            rangedHeaders.remove("Range");
-            RangedSegmentInput ranged = new RangedSegmentInput(realUrl, rangedHeaders);
-            try {
-                ranged.start();
-                byte[] whole = readAll(ranged);
-                ranged.close();
-                Map<String, String> rh = new LinkedHashMap<>();
-                rh.put("Content-Type", "video/mp2t");
-                rh.put("Content-Length", String.valueOf(whole.length));
-                resp = new Upstream.Resp(200, "OK", rh, whole);
-            } catch (IOException e) {
-                // 403/404 需要进入下方 3b 的 bk 轮换逻辑，构造一个带状态码的 Resp
-                String msg = e.getMessage() == null ? "" : e.getMessage();
-                int st = 502;
-                if (msg.contains("403")) st = 403;
-                else if (msg.contains("404")) st = 404;
-                Map<String, String> errh = new LinkedHashMap<>();
-                resp = new Upstream.Resp(st, msg, errh, new byte[0]);
-            }
-        } else {
-            resp = Upstream.httpGet(realUrl, headers, 30_000);
-        }
+        Upstream.Resp resp = Upstream.httpGet(realUrl, headers, 30_000);
 
         // 3b) 分片被拒（403/404）→ 若是 bk 通道，轮换到下一个候选 CDN 并就地重试一次。
         //     背景：某些 CDN 的播放列表能拉通，但数据面整片 403（实测 cctv4k 候选 0 全 403、

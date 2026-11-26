@@ -42,12 +42,7 @@ public final class Upstream {
     /** 单次上游播放列表拉取超时。 */
     public static final int PLAYLIST_TIMEOUT_MS = 10_000;
     /** JCE 请求超时（Python 是 20s urlopen）。 */
-    /**
-     * JCE 播放列表请求超时（毫秒）。
-     * <p>一个 m3u8 只有几 KB，正常 0.2s 内返回；原来给 20s，一旦 CDN 卡住就会
-     * 把后台刷新线程整整堵住 20 秒，播放列表直接过期。6s 足够，也留了重试机会。
-     */
-    public static final int JCE_TIMEOUT_MS = 6_000;
+    public static final int JCE_TIMEOUT_MS = 20_000;
 
     /** 分片大小上限（Python 是 35MB 的硬闸）。 */
     public static final int MAX_SEGMENT_BYTES = 35 * 1024 * 1024;
@@ -217,18 +212,10 @@ public final class Upstream {
         return sb.toString();
     }
 
-    /** 拉 JCE 时移播放列表。对齐 Python {@code _jce_playlist_headers()}。 */
+    /** 拉 JCE 时移播放列表（带浏览器 UA）。 */
     public static String fetchJcePlaylist(String m3u8Url) throws IOException {
         Map<String, String> headers = new LinkedHashMap<>();
-        // 关键：必须用官方客户端标识 qqlive + UID。
-        // 用浏览器 UA 会被 CDN 分到限速节点：实测同一分片浏览器 UA 只有 12KB/s，
-        // 而官方标识下 512KB 仅 0.22s（2.3MB/s）。
-        headers.put("User-Agent", "qqlive");
-        headers.put("Accept", "application/vnd.apple.mpegurl,application/x-mpegURL,*/*");
-        String guid = com.gary.ysplive.core.jce.JceRequest.guid();
-        if (guid != null && !guid.trim().isEmpty()) {
-            headers.put("UID", guid);
-        }
+        headers.put("User-Agent", UA);
         Resp resp = httpGet(m3u8Url, headers, JCE_TIMEOUT_MS);
         if (!resp.ok()) {
             throw new IOException("HTTP " + resp.status);
@@ -259,36 +246,6 @@ public final class Upstream {
     public static Resp httpGet(String url, Map<String, String> headers, int timeoutMs)
             throws IOException {
         return httpRequest("GET", url, headers, null, timeoutMs, true);
-    }
-
-    /** 打开一个不缓冲的 GET 连接，供 {@code /proxy.ts} 边下边发。 */
-    public static HttpURLConnection openStream(String url, Map<String, String> headers, int timeoutMs)
-            throws IOException {
-        URL u = new URL(url);
-        URLConnection raw = u.openConnection(Proxy.NO_PROXY);
-        if (!(raw instanceof HttpURLConnection)) {
-            throw new IOException("not an http(s) url: " + url);
-        }
-        HttpURLConnection conn = (HttpURLConnection) raw;
-        conn.setRequestMethod("GET");
-        conn.setConnectTimeout(Math.max(1000, timeoutMs));
-        conn.setReadTimeout(Math.max(1000, timeoutMs));
-        conn.setInstanceFollowRedirects(true);
-        conn.setUseCaches(false);
-        if (headers != null) {
-            for (Map.Entry<String, String> e : headers.entrySet()) {
-                String k = e.getKey();
-                String v = e.getValue();
-                if (k == null || v == null || k.isEmpty()) continue;
-                String lower = k.toLowerCase(Locale.ROOT);
-                if (lower.equals("host") || lower.equals("connection")
-                        || lower.equals("content-length") || lower.equals("accept-encoding")) {
-                    continue;
-                }
-                conn.setRequestProperty(k, headerValueClean(v));
-            }
-        }
-        return conn;
     }
 
     /**
