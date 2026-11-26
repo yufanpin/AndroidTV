@@ -60,6 +60,45 @@ public final class BkLive {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
+    /**
+     * bkliveinfo 全局请求节流。上游对同一出口 IP 的请求频率有配额，连续换台会让
+     * bkRefresh 疯狂打 bkliveinfo，撞上"操作过于频繁"（iretcode!=0）后所有频道
+     * 的 1080p 通道全挂。这里串行化所有请求：最小间隔 + 命中限流后的全局冷却。
+     */
+    private static final long MIN_REQUEST_GAP_MS = 1200L;
+    private static final Object FLOW_LOCK = new Object();
+    private static long lastRequestMs;
+    private static long rateLimitUntilMs;
+
+    /** 占用一个请求时隙；必要时阻塞。命中限流后全局冷却，避免连续换台雪崩。 */
+    private static void waitFlowSlot() {
+        synchronized (FLOW_LOCK) {
+            long now = System.currentTimeMillis();
+            long wait = 0L;
+            if (lastRequestMs > 0L) {
+                wait = MIN_REQUEST_GAP_MS - (now - lastRequestMs);
+            }
+            if (rateLimitUntilMs > now) {
+                wait = Math.max(wait, rateLimitUntilMs - now);
+            }
+            if (wait > 0L && wait < 60_000L) {
+                try {
+                    Thread.sleep(wait);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            lastRequestMs = System.currentTimeMillis();
+        }
+    }
+
+    /** 上游返回"操作过于频繁"时标记全局冷却。 */
+    private static void noteRateLimited() {
+        synchronized (FLOW_LOCK) {
+            rateLimitUntilMs = System.currentTimeMillis() + 15_000L;
+        }
+    }
+
     private BkLive() { }
 
     // ==================================================================
@@ -86,6 +125,7 @@ public final class BkLive {
         headers.put("User-Agent", BK_UA);
         headers.put("Accept", "application/json");
 
+        waitFlowSlot();
         String text = httpGet(url, headers, 5000);
         Object parsed;
         try {
@@ -102,7 +142,11 @@ public final class BkLive {
         int retcode = intOf(p.get("iretcode"), -1);
         if (retcode != 0) {
             Object errinfo = p.get("errinfo");
-            throw new IOException("iretcode=" + retcode + " " + (errinfo == null ? "" : errinfo));
+            String msg = (errinfo == null ? "" : errinfo.toString());
+            if (msg.contains("频繁") || msg.toLowerCase(java.util.Locale.ROOT).contains("frequent")) {
+                noteRateLimited();
+            }
+            throw new IOException("iretcode=" + retcode + " " + msg);
         }
 
         // 收集：playurl + backurl_list/backurlList/backurl
