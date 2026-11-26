@@ -11,6 +11,7 @@ import com.gary.ysplive.core.spi.Resolver;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -18,8 +19,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 频道刷新引擎：拥有全部 {@link Channel} 实例、控制面限速器、分片缓存，
@@ -1137,20 +1144,57 @@ public final class ChannelEngine {
     }
 
     /**
-     * 按 512KB Range 串行取流。
+     * 按 512KB Range 分块 + 并行预取取流。
      * <p>央视频 CDN 对「无 Range 的完整 GET」限速到约 12KB/s（2MB 分片要 20s+，
-     * 真机日志实测 18235ms/221KB），但对 Range 请求正常（实测 6.3MB/s）。
-     * 所以即使播放器没带 Range，我们也要自己切片：每块单独建连、独立超时重试，
-     * 卡住最多损失 512KB，不会拖死整片。
+     * 真机日志实测 18235ms/221KB）；即便带 Range，CDN 对<b>单条连接</b>仍有带宽上限
+     * （真机实测单连接约 190–270KB/s，4 条并行可达约 400KB/s）。1080p 直播需要
+     * 300KB/s 以上的稳定吞吐，单连接取流必然卡顿。
+     * <p>策略：首块走单连接同步拉取（起播只等这一块，512KB ≈ 2–3s）；之后维持
+     * WINDOW 个并发 Range 请求作流水线预取：{@link #submitWindow()} 非阻塞补齐在途请求，
+     * {@link #awaitFirst()} 只等队首一块就绪就立刻喂给播放器，其余块在后台继续下载。
+     * 这样播放缓冲不断档，聚合吞吐又随并发连接数放大。每块独立建连、独立重试（最多 3 次）。
      */
     static final class RangedSegmentInput extends InputStream {
         private static final int CHUNK = 512 * 1024;
+        /** 单次并发预取的分块数（在途连接上限）。 */
+        private static final int WINDOW = 4;
+        /** 共享取流线程池规模（WINDOW 在途 + 少量余量）。 */
+        private static final int SEGMENT_WORKERS = 6;
+        private static volatile ExecutorService segmentPool;
+        private static final AtomicInteger segmentSeq = new AtomicInteger();
+
+        private static ExecutorService pool() {
+            ExecutorService p = segmentPool;
+            if (p == null) {
+                synchronized (RangedSegmentInput.class) {
+                    p = segmentPool;
+                    if (p == null) {
+                        p = Executors.newFixedThreadPool(SEGMENT_WORKERS, new ThreadFactory() {
+                            @Override
+                            public Thread newThread(Runnable r) {
+                                Thread t = new Thread(r, "ysp-seg-" + segmentSeq.incrementAndGet());
+                                t.setDaemon(true);
+                                return t;
+                            }
+                        });
+                        segmentPool = p;
+                    }
+                }
+            }
+            return p;
+        }
+
         private final String url;
         private final Map<String, String> baseHeaders;
+        /** 已提交、下载中或已就绪的分块请求（按序），队首即下一块要消费的数据。 */
+        private final ArrayDeque<Future<byte[]>> pending = new ArrayDeque<>();
         private byte[] current;
         private int offset;
         private long nextStart;
+        /** 下一个待提交分块的起始位置（与已消费位置 nextStart 区分）。 */
+        private long submittedEnd;
         long totalLength = -1L;
+        private boolean finished;
         /** CDN 不支持 Range（回 200）时退化成直读这条连接。 */
         private HttpURLConnection direct;
         private InputStream directBody;
@@ -1183,16 +1227,30 @@ public final class ChannelEngine {
                 throw new IOException("upstream HTTP " + status);
             }
             totalLength = parseContentRangeTotal(conn.getHeaderField("Content-Range"));
+            byte[] first;
             try {
-                current = readAll(conn.getInputStream());
+                first = readAll(conn.getInputStream());
             } finally {
                 conn.disconnect();
             }
-            long expected = totalLength > 0 ? Math.min((long) CHUNK, totalLength) : current.length;
-            if (current.length != expected) {
-                current = fetchRange(0, expected - 1);
+            long expected = totalLength > 0 ? Math.min((long) CHUNK, totalLength) : first.length;
+            if (first.length != expected) {
+                first = fetchRange(0, expected - 1);
             }
-            nextStart = current.length;
+            if (first.length == 0) {
+                finished = true;
+                return;
+            }
+            current = first;
+            offset = 0;
+            nextStart = first.length;
+            submittedEnd = nextStart;
+            if (totalLength > 0 && nextStart >= totalLength) {
+                finished = true;
+            } else {
+                // 首块到手后立即启动后续窗口的后台预取
+                submitWindow();
+            }
         }
 
         @Override
@@ -1216,19 +1274,62 @@ public final class ChannelEngine {
                 }
                 current = null;
                 offset = 0;
-                if (nextStart < 0 || (totalLength > 0 && nextStart >= totalLength)) {
+                if (finished && pending.isEmpty()) {
                     return -1;
                 }
-                long end = totalLength > 0
-                        ? Math.min(totalLength, nextStart + CHUNK) - 1
-                        : nextStart + CHUNK - 1;
-                byte[] next = fetchRange(nextStart, end);
+                // 补齐在途窗口（非阻塞），只等队首一块就绪就立即返回给播放器
+                submitWindow();
+                if (pending.isEmpty()) {
+                    return -1;
+                }
+                byte[] next = awaitFirst();
                 if (next.length == 0) {
+                    finished = true;
                     return -1;
                 }
                 current = next;
-                nextStart += next.length;
             }
+        }
+
+        /** 非阻塞地把在途请求补到 WINDOW 个。后台线程并行下载，消费线程不等齐。 */
+        private void submitWindow() {
+            if (directBody != null || finished) {
+                return;
+            }
+            long s = submittedEnd;
+            while (pending.size() < WINDOW) {
+                if (totalLength > 0 && s >= totalLength) {
+                    break;
+                }
+                final long end = totalLength > 0 ? Math.min(totalLength, s + CHUNK) - 1 : s + CHUNK - 1;
+                final long fs = s;
+                pending.addLast(pool().submit(() -> fetchRange(fs, end)));
+                s = end + 1;
+            }
+            submittedEnd = s;
+        }
+
+        /** 只等队首一块下载完成；其余块仍在后台并行下载，不阻塞播放器。 */
+        private byte[] awaitFirst() throws IOException {
+            Future<byte[]> f = pending.removeFirst();
+            byte[] data;
+            try {
+                data = f.get();
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw new IOException("segment prefetch interrupted", ie);
+            } catch (ExecutionException ee) {
+                Throwable c = ee.getCause();
+                if (c instanceof IOException) {
+                    throw (IOException) c;
+                }
+                throw new IOException("segment prefetch failed", c);
+            }
+            nextStart += data.length;
+            if (totalLength > 0 && nextStart >= totalLength) {
+                finished = true;
+            }
+            return data;
         }
 
         private byte[] fetchRange(long start, long end) throws IOException {
@@ -1245,7 +1346,19 @@ public final class ChannelEngine {
                     if (status != 206 && status != 200) {
                         throw new IOException("chunk HTTP " + status);
                     }
-                    return readAll(conn.getInputStream());
+                    byte[] body = readAll(conn.getInputStream());
+                    if (status == 200 && body.length > end - start + 1) {
+                        // CDN 忽略了 Range 返回完整文件：按请求区间截取，避免数据错位
+                        int from = (int) start;
+                        int to = (int) Math.min(body.length, end + 1);
+                        if (from >= body.length || to <= from) {
+                            return new byte[0];
+                        }
+                        byte[] slice = new byte[to - from];
+                        System.arraycopy(body, from, slice, 0, slice.length);
+                        return slice;
+                    }
+                    return body;
                 } catch (IOException e) {
                     last = e;
                 } finally {
@@ -1267,6 +1380,11 @@ public final class ChannelEngine {
                 direct.disconnect();
             }
             current = null;
+            for (Future<byte[]> f : pending) {
+                f.cancel(true);
+            }
+            pending.clear();
+            finished = true;
         }
     }
 
