@@ -81,6 +81,20 @@ object PlayerManager {
     @Volatile
     private var events: Events? = null
 
+    /**
+     * 换台窗口标志：IJK 在 reset() 正在播放的实例时会异步回调 onError，
+     * 这是换源的副产物而非真实信号中断。窗口期内抑制该伪错误，
+     * 避免 MainActivity 误判为"信号中断"并触发 5s 延迟重试（换台卡顿的根源）。
+     */
+    @Volatile
+    private var switching = false
+
+    /** 换台窗口内暂存的真实错误（新源失败时不能吞，否则无重试）。 */
+    @Volatile
+    private var pendingError: Pair<Int, Int>? = null
+
+    private val switchHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     @Volatile
     private var currentSurface: Surface? = null
 
@@ -158,6 +172,22 @@ object PlayerManager {
         playWhenReady = true
         AppLogStore.i(TAG, "play url=$url forceHls=$forceHls audioGain=$audioGain")
         setState(PlaybackState.BUFFERING)
+        // 打开换台抑制窗口：reset 旧源的伪 onError 不算信号中断；
+        // 窗口结束时若新源仍未 READY 且有暂存错误，则如实上报触发重试。
+        switching = true
+        pendingError = null
+        switchHandler.removeCallbacksAndMessages(null)
+        switchHandler.postDelayed({
+            switching = false
+            pendingError?.let { (w, e) ->
+                if (playbackState != PlaybackState.READY) {
+                    AppLogStore.w(TAG, "switch error surfaced what=$w extra=$e")
+                    setState(PlaybackState.IDLE)
+                    events?.onError(w, e)
+                }
+            }
+            pendingError = null
+        }, 1200L)
         runCatching {
             p.reset()
             applyOptions(p)
@@ -212,10 +242,19 @@ object PlayerManager {
 
         p.setOnPreparedListener { mp ->
             AppLogStore.i(TAG, "onPrepared")
+            switching = false  // 新源已就绪，伪错误作废
+            pendingError = null
             setState(PlaybackState.READY)
             runCatching { mp.start() }
         }
         p.setOnErrorListener { _, what, extra ->
+            if (switching) {
+                // 换台窗口内先暂存：reset 伪错误会在新源 READY 后被清除；
+                // 真实失败则在窗口结束时由 postDelayed 上报，避免吞掉重试机会。
+                AppLogStore.i(TAG, "onError pending during switch what=$what extra=$extra")
+                pendingError = Pair(what, extra)
+                return@setOnErrorListener true
+            }
             AppLogStore.w(TAG, "onError what=$what extra=$extra")
             setState(PlaybackState.IDLE)
             events?.onError(what, extra)
