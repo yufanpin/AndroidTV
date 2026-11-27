@@ -32,6 +32,19 @@ final class MiguApi {
     private static final String PLAYURL = "https://play.miguvideo.com/playurl/v1/play/playurl";
     private static final Random RANDOM = new Random();
 
+    /** playurl 请求节流：上游对频繁请求会返回风控 HTML，2s 间隔避免触发。 */
+    private static final Object FLOW_LOCK = new Object();
+    private static long lastPlayurlMs;
+    private static void waitSlot() {
+        synchronized (FLOW_LOCK) {
+            long wait = 2000L - (System.currentTimeMillis() - lastPlayurlMs);
+            if (lastPlayurlMs > 0L && wait > 0L && wait < 10000L) {
+                try { Thread.sleep(wait); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            }
+            lastPlayurlMs = System.currentTimeMillis();
+        }
+    }
+
     private MiguApi() { }
 
     /** HTTP 响应。 */
@@ -63,7 +76,17 @@ final class MiguApi {
                     conn.setRequestProperty(e.getKey(), e.getValue());
                 }
             }
-            int code = conn.getResponseCode();
+            int code;
+            try {
+                code = conn.getResponseCode();
+            } catch (java.net.ProtocolException pe) {
+                // 上游偶发返回非标准状态行（如风控 HTML 直接以 <html> 开头），
+                // HttpURLConnection 会抛 ProtocolException。降级为原始流读取，
+                // 交给上层 json/m3u8 判定，而不是直接 fail（对应 PHP curl 行为）。
+                InputStream raw = conn.getInputStream();
+                String body = raw == null ? "" : new String(readAll(raw), StandardCharsets.UTF_8);
+                return new Resp(0, body, null, conn.getContentType());
+            }
             String loc = conn.getHeaderField("Location");
             String type = conn.getContentType();
             InputStream in = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
@@ -143,12 +166,23 @@ final class MiguApi {
 
     /** 解析频道的最终 m3u8 地址；失败返回 null。 */
     static String resolve(String pid) {
+        // 最多两次：首次若撞上游风控（返回 HTML 而非 JSON），节流后重试一次
+        for (int attempt = 0; attempt < 2; attempt++) {
+            String result = resolveOnce(pid, attempt > 0);
+            if (result != null) return result;
+        }
+        return null;
+    }
+
+    private static String resolveOnce(String pid, boolean retry) {
         try {
+            waitSlot();
             String[] ua = apiUrl(pid);
             Resp res = fetch(ua[0], parseHeaders(ua[1]), true, 15000);
             String url = extractPlayUrl(res.body);
             if (url == null) {
-                Log.w(TAG, "[" + pid + "] playurl 无 url: code=" + res.code + " body=" + abbrev(res.body, 160));
+                Log.w(TAG, "[" + pid + "] playurl 无 url" + (retry ? "(retry)" : "")
+                        + ": code=" + res.code + " body=" + abbrev(res.body, 120));
                 return null;
             }
             int idx = url.indexOf("&puData=");
