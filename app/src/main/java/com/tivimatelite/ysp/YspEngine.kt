@@ -1,7 +1,7 @@
 package com.tivimatelite.ysp
 
 import android.content.Context
-import com.gary.ysplive.core.engine.YspGateway
+import com.gary.ysplive.core.migu.MiguGateway
 import com.gary.ysplive.core.spi.Gateway
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 /**
- * 引擎单例：持有 [YspGateway]，向界面与 Web 控制台暴露统一状态。
+ * 引擎单例：持有 [MiguGateway]（咪咕内核），向界面与 Web 控制台暴露统一状态。
  * 生命周期由 [YspEngineService] 负责，这里只保证「同一个进程只有一个实例」。
  */
 object YspEngine {
@@ -72,7 +72,7 @@ object YspEngine {
             }
             val config = YspConfig.load(app)
             com.gary.ysplive.core.spi.Log.setMinLevel(config.logLevel)
-            val created = YspGateway(config.toGatewayConfig(app))
+            val created = MiguGateway(config.toGatewayConfig(app))
             gateway = created
             val gen = ++generation
             lastStartError = ""
@@ -164,25 +164,22 @@ object YspEngine {
 
     fun lastError(): String = lastStartError
 
-    fun stopChannel(slug: String) {
-        val engine = (gateway as? YspGateway)?.engine() ?: return
-        runCatching { engine.stopChannel(slug) }
-    }
+    /** 咪咕内核无后台刷新线程，切台无需停止旧频道（保留空实现以兼容调用方）。 */
+    fun stopChannel(slug: String) { }
 
     fun channels(): List<ChannelInfo> {
-        val engine = (gateway as? YspGateway)?.engine() ?: return emptyList()
+        val mg = gateway as? MiguGateway ?: return emptyList()
         return runCatching {
-            engine.allChannels().map { ch ->
-                val spec = ch.spec()
+            mg.channels().map { ch ->
                 ChannelInfo(
                     slug = ch.slug(),
                     name = ch.name(),
-                    group = spec.group,
-                    mode = ch.mode(),
-                    defn = ch.defnLabel(),
-                    segments = ch.segmentCount(),
-                    lastOkSec = ch.lastOk(),
-                    error = ch.lastError()
+                    group = ch.group,
+                    mode = "咪咕",
+                    defn = "直播",
+                    segments = 0,
+                    lastOkSec = 0.0,
+                    error = ""
                 )
             }
         }.getOrElse { emptyList() }

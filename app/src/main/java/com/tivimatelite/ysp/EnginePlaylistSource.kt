@@ -31,7 +31,7 @@ object EnginePlaylistSource {
                     } else {
                         RemotePlaylistRepository.RemotePlaylistResult(
                             sourceUrl = url,
-                            activeSourceLabel = "ysp 本机引擎",
+                            activeSourceLabel = "咪咕本机引擎",
                             channels = channels
                         )
                     }

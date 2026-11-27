@@ -6,6 +6,7 @@ on:
       - main
       - master
       - ysp
+      - migu
   pull_request:
   workflow_dispatch:
 
