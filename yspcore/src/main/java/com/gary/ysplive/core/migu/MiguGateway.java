@@ -334,11 +334,43 @@ public final class MiguGateway implements Gateway {
                 }
             }
             cachePut(ch.pid, base);
+            prefetchNeighbors(ch);
             return MiguApi.rewriteAbsolute(m3u8, base).getBytes(StandardCharsets.UTF_8);
         } catch (IOException e) {
             Log.w(TAG, "[" + ch.name + "] 取流异常: " + e);
             return null;
         }
+    }
+
+    /**
+     * 后台预取相邻频道（当前 ID ±1）的 playurl 地址到缓存。
+     * 用户上下键换台时直接命中缓存，省去签名 + 302 的 2–4s 开销。
+     * 仅预取地址（不拉 m3u8 正文），且串行执行，避免并发打上游触发风控。
+     */
+    private void prefetchNeighbors(MiguChannel current) {
+        try {
+            int id = Integer.parseInt(current.id);
+            String[] neighbors = {String.valueOf(id + 1), String.valueOf(id - 1)};
+            Thread t = new Thread(new Runnable() {
+                @Override public void run() {
+                    for (String nid : neighbors) {
+                        MiguChannel n = MiguChannel.byId(nid);
+                        if (n == null) continue;
+                        synchronized (cache) {
+                            CacheEntry e = cache.get(n.pid);
+                            if (e != null && System.currentTimeMillis() - e.ts < CACHE_TTL_MS) continue;
+                        }
+                        String url = MiguApi.resolve(n.pid);
+                        if (url != null) {
+                            cachePut(n.pid, url);
+                            Log.i(TAG, "预取 " + n.name + " 完成", 10.0);
+                        }
+                    }
+                }
+            }, "migu-prefetch");
+            t.setDaemon(true);
+            t.start();
+        } catch (NumberFormatException ignored) { }
     }
 
     private String cacheGet(String pid) {
