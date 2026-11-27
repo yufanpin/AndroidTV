@@ -1,15 +1,37 @@
-# YSP TV（ysp 分支）
+# MIGU TV（migu 分支）
 
-**一个 APK，打开就能看央视频直播。** 不需要订阅地址、不需要电脑、不需要 Docker。
+**一个 APK，打开就能看咪咕直播。** 不需要订阅地址、不需要电脑、不需要 Docker。
 
-本分支是 [TiviMateLite](../..) 的 **YSP 专用版**：把央视频直播引擎直接编进 App，
-启动时在本机 `127.0.0.1:8767` 起一个轻量网关，播放器从它取流。
-`main` 分支仍是原来的 M3U 播放器；两者包名不同，可同时安装。
+本分支把咪咕直播协议内核编进 App，启动时在本机 `127.0.0.1:8767` 起一个轻量网关，
+播放器从它取流；同时提供 **Web 控制台**（端口 5221）。播放器为 **IJKPlayer**，
+内核为纯 Java 实现的咪咕 develop202 协议（移植自 `migu_lnss.php`）。
 
-- 应用名：**YSP TV**
-- 包名：`com.tivimatelite.ysp`
-- 频道：**64 路**（央视 30 / 卫视 34），1080p 起播，可选高码率 / 4K
-- 最低系统：Android 8.0（minSdk 26），目标 Android 9 机顶盒
+- 应用名：**MIGU TV**
+- 包名：`com.tivimatelite.migu`
+- 频道：**84 路**（央视 26 / 卫视 21 / 地方 31 / 轮播 6）
+- 最低系统：Android 8.0（minSdk 26），目标 Android 9 机顶盒 / MuMu 模拟器
+
+---
+
+## 内核如何运行
+
+内核（`MiguGateway`）由前台 Service（`YspEngineService`）持有，**App 启动后常驻运行**：
+
+```
+App 启动
+  └─ SplashActivity → YspEngineService（前台服务，常驻）
+       └─ YspEngine → MiguGateway（咪咕内核）
+            ├─ ServerSocket 监听 127.0.0.1:8767
+            ├─ /all.m3u        84 路频道清单（播放行自指本机 /?id=N）
+            ├─ /?id=N          咪咕签名 → playurl → 302 跟踪 → m3u8
+            └─ 流地址缓存 900s（命中不再打上游）
+```
+
+**关键行为**：
+1. 内核随 App 启动常驻，直到 App 退出或用户在 Web 后台点「停止引擎」；
+2. 84 路频道 m3u8 地址按 **900 秒**缓存，播放器 6 秒级清单轮询只打上游一次；
+3. 分片 **直连咪咕 CDN**（实测免 UA / Referer），不经本机代理；
+4. 换台时内核只解析新频道 playurl 签名并跟踪 302，命中缓存则直接返回。
 
 ---
 
@@ -17,28 +39,27 @@
 
 | 能力 | 说明 |
 |---|---|
-| 本机直播引擎 | 纯 Java 内核（`:yspcore`），启动时自动拉起，无需外部服务 |
-| 64 路频道 | 央视、CGTN、卫视、CETV、国学等 |
-| 1080p / 高码率 | 默认 1080p；Web 后台可开高码率，4K/8K 频道按需升级 |
-| 快速换台 | 上下键换台，换台时左下角显示 **台名 + 序号** |
-| 左右键重连 | 单线路场景下，左右键立即重连当前频道（不再切换线路） |
-| 音频增益 | 1.00–3.00 倍，`volume + alimiter` 防削波，保存后自动重播生效 |
-| Web 控制台 | 端口 **5221**，四个页签：状态 / 流程 / 设置 / 日志 |
-| 处理流程可视化 | 请求 → 选源 → 上游取流 → 列表改写 → 输出 → 播放器，实时事件流 |
-| 日志 | App 日志与引擎日志合并，支持级别筛选、增量刷新、下载 |
-| 开机自启 | 沿用系统开关，自启时同时拉起引擎 |
-| 局域网共享 | 可选：把 `8767` 暴露给 TiviMate / PotPlayer 等外部播放器 |
+| 本机直播内核 | 纯 Java `:yspcore/migu`，咪咕 develop202 签名算法，无外部服务 |
+| 84 路频道 | 央视、卫视、地方、轮播 |
+| 播放器 | IJKPlayer（k0.8.9 预编译 AAR，ARM 硬解 / x86 软解） |
+| 快速换台 | 错误抑制 + 流地址缓存 + 播放器复用；不误报「信号中断」 |
+| 按键操作 | 上下键换台、左右键重连、数字键选台、MENU/INFO 诊断浮层 |
+| Web 控制台 | 端口 **5221**，四页签：状态 / 流程 / 设置 / 日志 + JSON API |
+| 开机自启 / 局域网共享 | 系统开关自启；可选把 8767 暴露给外部播放器 |
+
+---
 
 ## 安装
 
-从 GitHub Actions 的 `YSPTV-debug-apk` artifact 下载 `app-debug.apk`，
-或在本仓库 Releases 中获取（如已发布）。
+CI 推送 `migu` 分支会构建 debug APK，从 GitHub Actions 的 `YSPTV-debug-apk` artifact 下载：
 
 ```bash
 adb install -r app-debug.apk
 ```
 
-桌面图标为「YSP TV」，深青色电视 + 播放键。
+桌面图标为「MIGU TV」。包名 `com.tivimatelite.migu`，可与 main / ysp 分支共存。
+
+---
 
 ## 使用
 
@@ -46,11 +67,8 @@ adb install -r app-debug.apk
 |---|---|
 | 上 / 下 | 换台（显示台名与序号） |
 | 左 / 右 | 重连当前频道 |
-| 数字键 | 数字选台（最长 4 位，900ms 确认） |
-| MENU / INFO | 诊断浮层（引擎端口、控制台地址、当前线路） |
-
-启动页会等待引擎就绪（通常 <2s，最长 12s）；失败时显示原因与「重试」，
-并提示用浏览器打开 `设备IP:5221` 查看日志。
+| 数字键 | 数字选台（1–84，900ms 确认） |
+| MENU / INFO | 诊断浮层 |
 
 ## Web 控制台（5221）
 
@@ -58,91 +76,89 @@ adb install -r app-debug.apk
 http://<设备IP>:5221/
 ```
 
-| 页签 | 内容 |
-|---|---|
-| 状态 | 引擎状态、端口、频道数、运行时长、内存、缓存、当前频道、设备会话 |
-| 流程 | 六段处理链路 + 最近事件流 + 当前频道 + 线路分布 |
-| 设置 | 高码率开关、仅 4K、缓存、并发、换台防抖、端口、局域网共享、日志级别、音频增益、开机自启 |
-| 日志 | App + 引擎合并日志，增量刷新，可筛选/清空/下载 |
-
-> 标 `*` 的设置保存后会自动重启引擎。5221 绑定 `0.0.0.0`，仅建议在可信局域网使用。
-
-### HTTP API
+四页签：状态 / 流程 / 设置 / 日志。主要 API：
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/status` | 引擎与当前频道状态 |
-| GET | `/api/channels` | 64 路频道状态 |
+| GET | `/api/status` | 内核与当前频道状态 |
+| GET | `/api/channels` | 84 路频道状态 |
 | GET | `/api/events?after=<seq>` | 流程事件增量 |
 | GET | `/api/logs?after=<seq>&level=` | 日志增量 |
-| GET | `/diag` | 引擎逐频道诊断（代理 `8767/diag`） |
-| GET | `/all.m3u` | 代理引擎订阅（给外部播放器） |
-| POST | `/config` | 保存设置并重启 |
-| POST | `/engine/restart` `/engine/stop` `/engine/start` | 引擎控制 |
-| POST | `/audio/gain` `/boot/toggle` `/logs/clear` | 沿用 |
+| GET | `/all.m3u` `/diag` | 引擎订阅 / 诊断 |
+| POST | `/config` `/engine/restart` `/engine/stop` `/engine/start` | 配置与内核控制 |
+
+---
 
 ## 架构
 
 ```
-YSP TV (com.tivimatelite.ysp)
+MIGU TV (com.tivimatelite.migu)
 ├─ SplashActivity ──启动──> YspEngineService（前台服务）
-│                              └─ YspGateway（:yspcore 纯 Java）
-│                                   ├─ LocalServer :8767  /all.m3u  /<channel>.m3u8  /proxy.ts
-│                                   ├─ ChannelEngine（64 路、JCE/BK/设备协议）
-│                                   └─ TsSegmentCache / 日志总线
+│                              └─ MiguGateway（:yspcore/migu 纯 Java）
+│                                   ├─ MiguChannel  84 路频道表
+│                                   ├─ MiguApi      develop202 签名 + ddCalcu + 302 跟踪
+│                                   └─ ServerSocket :8767  /all.m3u  /?id=N  /health  /diag
 ├─ MainActivity（IJKPlayer + SurfaceView）
 │    └─ ChannelLoader ← http://127.0.0.1:8767/all.m3u（唯一频道来源）
-└─ LocalAdminServer :5221（NanoHTTPD，控制台）
+│       └─ ChannelSwitcher（换台防抖 / 单源重试 / 缓冲故障转移）
+└─ LocalAdminServer :5221（NanoHTTPD，Web 控制台）
 ```
 
-- `:yspcore`：44 个 Java 文件、约 1.4 万行，零 Android 依赖；自带 262 个单元测试。
-- 数据目录：`Android/data/com.tivimatelite.ysp/files/ysp/`（设备身份、缓存状态）。
-- 默认参数：缓存 32MB、单设备并发 4、换台防抖 10s、高码率**关闭**（低端盒子优先稳定）。
+### 内核协议实现
+
+`MiguApi` 逐行移植自 `migu_lnss.php`（develop202 算法）：
+- **签名**：「毫秒时间戳 + contId + 版本前缀」双 md5 + 固定盐 + 随机盐前 4 位；
+- **ddCalcu**：对 `puData` 逐字符「尾 + 头」交叉拼接，按日期与频道 ID 插字；
+- **302 跟踪**：最多 6 跳跟随至最终 CDN 清单地址；
+- **清单改写**：分片与 KEY/MAP 的 URI 转绝对地址（分片直连 CDN）；
+- **风控容错**：playurl 偶发返回 HTML 风控页时降级读取 + 2s 节流 + 失败重试。
+
+---
+
+## 换台速度与优化
+
+真机实测（MuMu / Android 12 / x86_64）：换台 **5–8 秒**出画，
+无「信号中断」误报、无 5 秒重试。
+
+**为什么不是「0 等待」**：换台必须向咪咕 API 请求新频道签名地址（签名 + 302），
+并为播放器重新初始化解码器，这两步有固有网络与解码开销，无法真正零延迟。
+
+**已做优化**：
+1. 流地址 900s 缓存 —— 回访频道不重复解析；
+2. 换台错误抑制窗口 —— IJK `reset()` 旧源的伪 `onError` 不再误报「信号中断」，
+   避免 5 秒延迟重试（此前换台卡顿主因）；
+3. playurl 全局 2s 节流 + 失败重试 —— 避免密集换台触发上游风控 HTML；
+4. 播放器复用同一 IJK 实例（reset + setDataSource），不重建 native 层。
+
+**进一步优化方向**（如需接近秒开）：启动后后台预取相邻频道 m3u8 到缓存，
+换台时直接命中缓存省去签名与 302 步骤；代价是启动时增加上游请求。
+
+---
 
 ## 构建
 
-仓库包含 GitHub Actions 工作流（`.github/workflows/android.yml`），
-推送到 `ysp` 分支即构建 debug APK 并上传 artifact。
+推送到 `migu` 分支触发 `.github/workflows/android.yml`，构建 debug APK + 单测 + 上传 artifact。
 
-本地构建需要 JDK 17+ 与 Android SDK（`platforms;android-35`、`build-tools;35.0.0`）：
+本地构建需 JDK 17+ 与 Android SDK（`platforms;android-35`）：
 
 ```bash
 gradle assembleDebug --no-daemon
-# 产物：app/build/outputs/apk/debug/app-debug.apk
 ```
 
-调试签名使用仓库内的 `app/ysp-debug.jks`（口令 `ysplive`），
-保证 CI 多次构建可覆盖安装；正式发布请替换为自己的 keystore。
+---
 
 ## 已知限制
 
-1. **依赖上游接口**：本项目复刻央视频客户端协议，上游改签名/风控会导致暂时不可用；
-   引擎内置 JCE 限流冷却与 SWR 旧列表兜底，但仍可能短暂黑屏。
-2. **CDN 速度**：部分时段央视频 CDN 对单连接限速明显，引擎已改为 256KB 并行 Range 取流；
-   网络极差时仍可能起播慢。
-3. **x86 模拟器**：MuMu 等 x86 环境强制 ffmpeg 软解；真机（ARM）使用硬解。
-4. **无 M3U 兜底**：本分支刻意不内置第三方源，引擎不可用时只显示诊断信息，不偷偷切源。
-5. **回看**：引擎支持 53 路 7 天时移，App 暂未提供回看时间选择 UI。
-6. **4K**：需要设备 HEVC 硬解与 ≥50Mbps 带宽；低端盒子建议保持高码率关闭。
+1. 依赖咪咕上游接口，签名算法或风控变化会导致解析失败；内核有节流与重试兜底。
+2. x86 模拟器走软解，性能低于 ARM 真机。
+3. Web 后台 5221 绑定 `0.0.0.0`，仅建议在可信局域网使用。
+4. 本分支基于 IJKPlayer；ExoPlayer 方案见 `ysp` 分支（历史版本）。
 
-## 验证情况（2026-11-26）
-
-在 MuMu Player（Android 12 / x86_64 / Houdini ARM 转译，强制软解）上实测：
-
-- 启动后加载 **64 路频道**，`/api/status` 返回 64；
-- CCTV-1、CCTV-2 均成功出画（1920×1080），换台后自动重连；
-- 上下键换台时左下角显示 **台名 + 序号**；左右键显示「重连当前频道」并立即重播；
-- 5221 控制台四个页签可访问，`/api/status`、`/api/events`、`/api/logs` 正常；
-- 高码率开关保存后引擎自动重启，`highBitrate` 由 false 变 true，再关闭可恢复；
-- `yspcore` 255 项单元测试 + `app` 43 项单元测试通过。
-
-> 受当前网络到央视频 CDN 的限速影响，模拟器冷启动首播可能需要 30–60 秒
-> （引擎会持续重试并最终出画）；真实机顶盒使用硬解且网络路径不同，通常明显更快。
+---
 
 ## 来源与声明
 
-- 内核移植自 [`ysp-live-android`](https://github.com/2909272751/ysp-live-android) 的 `core`，
-  其原创代码以 MIT 发布（见 `yspcore/LICENSE`）；协议常量与频道数据的权利归原作者。
-- 本项目与央视、央视频无任何关联，不存储、不分发视频内容，仅在本机转发公开接口。
-- 仅供技术学习与个人研究，请勿用于商业用途或公开传播；使用风险由使用者自行承担。
-- `main` 分支与 `ysp` 分支互不影响；本分支的改动不会自动合并回 `main`。
+- 咪咕协议算法参考 `migu_lnss.php`（LNSS 自写源契约 v1），移植为 Java 实现。
+- 项目框架继承 TiviMateLite，内核接口 `Gateway` 保持与上游 core 兼容。
+- 本项目与咪咕、央视无关联，不存储、不分发视频内容，仅在本机转发公开接口。
+- 仅供技术学习与个人研究，请勿用于商业用途或公开传播。

@@ -8,13 +8,13 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        // ysp 分支独立包名，可与 main 分支的 com.tivimatelite 共存
-        applicationId = "com.tivimatelite.ysp"
+        // migu 分支独立包名，可与 main / ysp 分支共存
+        applicationId = "com.tivimatelite.migu"
         // 引擎内核使用 java.time / String.join（API 26）；目标机为 Android 9+
         minSdk = 26
         targetSdk = 28
         versionCode = 1
-        versionName = "ysp-1.0.0"
+        versionName = "migu-1.0.0"
         buildConfigField("String", "PLAYLIST_URL", "\"\"")
 
         ndk {

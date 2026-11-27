@@ -401,7 +401,7 @@ class LocalAdminServer(
             <!doctype html>
             <html><head><meta charset="utf-8"/>
             <meta name="viewport" content="width=device-width,initial-scale=1"/>
-            <title>YSP TV · $title</title>
+            <title>MIGU TV · $title</title>
             <style>
               *{box-sizing:border-box}
               body{margin:0;background:#080d0c;color:#e6efec;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -446,7 +446,7 @@ class LocalAdminServer(
             </style></head>
             <body><div class="wrap">
               <header>
-                <div><h1>YSP TV 控制台</h1><div class="sub">${esc(LocalAdminServerManager.getAdminUrl())} · 本机引擎 ${if (state.port > 0) "127.0.0.1:${state.port}" else "尚未启动"}</div></div>
+                <div><h1>MIGU TV 控制台</h1><div class="sub">${esc(LocalAdminServerManager.getAdminUrl())} · 本机引擎 ${if (state.port > 0) "127.0.0.1:${state.port}" else "尚未启动"}</div></div>
                 $pill
               </header>
               <nav class="tabs">

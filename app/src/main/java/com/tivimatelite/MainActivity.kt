@@ -46,7 +46,7 @@ class MainActivity : AppCompatActivity() {
     private var readyStallIgnoreUntilMs = 0L
     private var lastReadyStallRecoveryAtMs = 0L
     private var lastPlaylistFingerprint: String? = null
-    private var activePlaylistSource = "ysp 本机引擎"
+    private var activePlaylistSource = "咪咕本机引擎"
     private var channelNameHideJob: Job? = null
 
     /** SurfaceHolder.Callback ȷ�����洴��/�ؽ�ʱ������ʱ��棬�ƹ� Amlogic HWC ������� bug */

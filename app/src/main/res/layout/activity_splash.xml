@@ -27,7 +27,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="22dp"
             android:letterSpacing="0.12"
-            android:text="YSP TV"
+            android:text="MIGU TV"
             android:textColor="#FFFFFF"
             android:textSize="27sp"
             android:textStyle="bold" />
