@@ -230,7 +230,7 @@ public final class MiguGateway implements Gateway {
                     send(s, 502, ctype, body); return;
                 }
             } else if (route.endsWith(".m3u8")) {
-                String id = normalizeId(route.substring(0, route.length() - 6));
+                String id = normalizeId(route.substring(0, route.length() - 5));
                 MiguChannel ch = id == null ? null : MiguChannel.byId(id);
                 if (ch == null) {
                     body = "404 - channel not found\n".getBytes(StandardCharsets.UTF_8);
