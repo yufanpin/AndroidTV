@@ -299,6 +299,10 @@ object PlayerManager {
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", OPT_FRAMEDROP)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "overlay-format", OPT_OVERLAY_FORMAT_RV32)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
+        // 秒开：prepare 完成即自动 start，省一次异步回调往返（takagen99/Box 生产验证）
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
+        // 音频钉死 AudioTrack：部分盒子 OpenSL ES 固件异常（无声/爆音），0 = 关 OpenSL
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "opensles", 0L)
         // 音频增益：avfilter 链（`af` 同属 PLAYER(4) 类别，仅在 CONFIG_AVFILTER 下注册）
         buildAudioFilterChain()?.let {
             p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "af", it)
@@ -309,6 +313,8 @@ object PlayerManager {
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", OPT_PROBESIZE)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", OPT_ANALYZEDURATION)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1L)
+        // DNS 超长缓存（≈6.9 天）：换台时 CDN 域名免重复解析，省一次 getaddrinfo
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "dns_cache_timeout", 600000000L)
 
         // CODEC(2)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", OPT_SKIP_LOOP_FILTER)
