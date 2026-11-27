@@ -82,18 +82,12 @@ object PlayerManager {
     private var events: Events? = null
 
     /**
-     * 换台窗口标志：IJK 在 reset() 正在播放的实例时会异步回调 onError，
-     * 这是换源的副产物而非真实信号中断。窗口期内抑制该伪错误，
-     * 避免 MainActivity 误判为"信号中断"并触发 5s 延迟重试（换台卡顿的根源）。
+     * 播放代次：每次 [play] 递增。快速连按时，上一次换台的异步回调（onPrepared/onError）
+     * 因代次不匹配被直接丢弃，从根上避免 IJK reset 旧源产生的伪 onError 泄漏成
+     * 「信号中断」误报（固定时间窗方案在 prepare 超窗后仍会漏，代次方案彻底根治）。
      */
     @Volatile
-    private var switching = false
-
-    /** 换台窗口内暂存的真实错误（新源失败时不能吞，否则无重试）。 */
-    @Volatile
-    private var pendingError: Pair<Int, Int>? = null
-
-    private val switchHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var activeGen = 0
 
     @Volatile
     private var currentSurface: Surface? = null
@@ -172,22 +166,11 @@ object PlayerManager {
         playWhenReady = true
         AppLogStore.i(TAG, "play url=$url forceHls=$forceHls audioGain=$audioGain")
         setState(PlaybackState.BUFFERING)
-        // 打开换台抑制窗口：reset 旧源的伪 onError 不算信号中断；
-        // 窗口结束时若新源仍未 READY 且有暂存错误，则如实上报触发重试。
-        switching = true
-        pendingError = null
-        switchHandler.removeCallbacksAndMessages(null)
-        switchHandler.postDelayed({
-            switching = false
-            pendingError?.let { (w, e) ->
-                if (playbackState != PlaybackState.READY) {
-                    AppLogStore.w(TAG, "switch error surfaced what=$w extra=$e")
-                    setState(PlaybackState.IDLE)
-                    events?.onError(w, e)
-                }
-            }
-            pendingError = null
-        }, 1200L)
+
+        // 代次递增并重绑回调：闭包捕获本次 gen，旧一次换台的迟到回调因 gen 不匹配被丢弃。
+        val gen = ++activeGen
+        bindListeners(p, gen)
+
         runCatching {
             p.reset()
             applyOptions(p)
@@ -195,8 +178,47 @@ object PlayerManager {
             p.setDataSource(url)
             p.prepareAsync()
         }.onFailure {
+            if (gen != activeGen) return@onFailure
             AppLogStore.e(TAG, "play() failed for $url", it)
             events?.onError(IMediaPlayer.MEDIA_ERROR_UNKNOWN, 0)
+        }
+    }
+
+    /**
+     * 绑定本次播放的回调。全部带 [gen] 判断：只有「当前代次」的回调才生效，
+     * 上一次换台（已被 reset）残留的 onPrepared/onError/onInfo 一律忽略。
+     */
+    private fun bindListeners(p: IjkMediaPlayer, gen: Int) {
+        p.setOnPreparedListener { mp ->
+            if (gen != activeGen) return@setOnPreparedListener
+            AppLogStore.i(TAG, "onPrepared")
+            setState(PlaybackState.READY)
+            runCatching { mp.start() }
+        }
+        p.setOnErrorListener { _, what, extra ->
+            if (gen != activeGen) return@setOnErrorListener true
+            AppLogStore.w(TAG, "onError what=$what extra=$extra")
+            setState(PlaybackState.IDLE)
+            events?.onError(what, extra)
+            true
+        }
+        p.setOnCompletionListener {
+            if (gen != activeGen) return@setOnCompletionListener
+            AppLogStore.i(TAG, "onCompletion")
+            setState(PlaybackState.ENDED)
+        }
+        p.setOnInfoListener { _, what, _ ->
+            if (gen != activeGen) return@setOnInfoListener true
+            when (what) {
+                IMediaPlayer.MEDIA_INFO_BUFFERING_START -> setState(PlaybackState.BUFFERING)
+                IMediaPlayer.MEDIA_INFO_BUFFERING_END -> setState(PlaybackState.READY)
+            }
+            true
+        }
+        p.setOnVideoSizeChangedListener { _, width, height, sarNum, sarDen ->
+            if (gen != activeGen) return@setOnVideoSizeChangedListener
+            AppLogStore.i(TAG, "videoSize ${width}x$height sar=$sarNum:$sarDen")
+            events?.onVideoSizeChanged(width, height, sarNum, sarDen)
         }
     }
 
@@ -206,6 +228,7 @@ object PlayerManager {
     }
 
     fun release() {
+        activeGen++  // 使所有在途回调失效，避免释放后旧回调误触发
         synchronized(this) {
             player?.release()
             player = null
@@ -239,42 +262,7 @@ object PlayerManager {
         AppLogStore.i(TAG, "createPlayer: IjkMediaPlayer")
         val p = IjkMediaPlayer()
         runCatching { IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_WARN) }
-
-        p.setOnPreparedListener { mp ->
-            AppLogStore.i(TAG, "onPrepared")
-            switching = false  // 新源已就绪，伪错误作废
-            pendingError = null
-            setState(PlaybackState.READY)
-            runCatching { mp.start() }
-        }
-        p.setOnErrorListener { _, what, extra ->
-            if (switching) {
-                // 换台窗口内先暂存：reset 伪错误会在新源 READY 后被清除；
-                // 真实失败则在窗口结束时由 postDelayed 上报，避免吞掉重试机会。
-                AppLogStore.i(TAG, "onError pending during switch what=$what extra=$extra")
-                pendingError = Pair(what, extra)
-                return@setOnErrorListener true
-            }
-            AppLogStore.w(TAG, "onError what=$what extra=$extra")
-            setState(PlaybackState.IDLE)
-            events?.onError(what, extra)
-            true
-        }
-        p.setOnCompletionListener {
-            AppLogStore.i(TAG, "onCompletion")
-            setState(PlaybackState.ENDED)
-        }
-        p.setOnInfoListener { _, what, extra ->
-            when (what) {
-                IMediaPlayer.MEDIA_INFO_BUFFERING_START -> setState(PlaybackState.BUFFERING)
-                IMediaPlayer.MEDIA_INFO_BUFFERING_END -> setState(PlaybackState.READY)
-            }
-            true
-        }
-        p.setOnVideoSizeChangedListener { _, width, height, sarNum, sarDen ->
-            AppLogStore.i(TAG, "videoSize ${width}x$height sar=$sarNum:$sarDen")
-            events?.onVideoSizeChanged(width, height, sarNum, sarDen)
-        }
+        // 回调在 play() 里按代次绑定（bindListeners），此处不绑，避免旧 listener 残留。
         return p
     }
 
