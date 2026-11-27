@@ -16,9 +16,12 @@ class AdminFeatureSourceTest {
         assertTrue(source.contains("/api/logs"))
         assertTrue(source.contains("/config"))
         assertTrue(source.contains("/engine/restart"))
-        assertTrue(source.contains("高码率"))
-        assertTrue(source.contains("事件流"))
         assertTrue(source.contains("/boot/toggle"))
+        assertTrue(source.contains("MIGU TV"))
+        // ysp 设备协议遗留项已从 migu 后台移除
+        assertTrue(!source.contains("高码率"))
+        assertTrue(!source.contains("事件流"))
+        assertTrue(!source.contains("GUID"))
     }
 
     @Test

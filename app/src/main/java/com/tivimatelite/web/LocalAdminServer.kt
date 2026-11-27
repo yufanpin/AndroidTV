@@ -15,8 +15,8 @@ import java.net.URL
 import java.util.Locale
 
 /**
- * ysp 分支的本地控制台（5221）。
- * 四个页签：状态 / 流程 / 设置 / 日志；同时提供 JSON API 给页面增量刷新。
+ * migu 分支的本地控制台（5221）。
+ * 三个页签：状态 / 设置 / 日志；同时提供 JSON API 给页面增量刷新。
  */
 class LocalAdminServer(
     context: Context,
@@ -38,7 +38,6 @@ class LocalAdminServer(
     private fun handleGet(session: IHTTPSession): Response {
         return when (session.uri) {
             "/" -> html(pageStatus())
-            "/flow" -> html(pageFlow())
             "/settings" -> html(pageSettings())
             "/logs" -> html(pageLogs())
             "/api/status" -> json(statusJson())
@@ -65,12 +64,9 @@ class LocalAdminServer(
             put("error", state.error)
             put("port", state.port)
             put("channels", state.channels)
-            put("highBitrate", state.highBitrateReady)
             put("uptimeMs", state.uptimeMs)
             put("cacheEntries", state.cacheEntries)
             put("cacheHitRate", state.cacheHitRate)
-            put("guid", state.guid)
-            put("heartbeat", state.heartbeat)
             put("rssMb", rssMb())
             put("adminUrl", LocalAdminServerManager.getAdminUrl())
             put("engineUrl", YspEngine.playlistUrl())
@@ -180,11 +176,6 @@ class LocalAdminServer(
         val current = YspConfig.load(appContext)
         val updated = current.copy(
             port = param(session, "port")?.toIntOrNull() ?: current.port,
-            cacheMb = param(session, "cache")?.toIntOrNull() ?: current.cacheMb,
-            linksPerDevice = param(session, "links")?.toIntOrNull() ?: current.linksPerDevice,
-            zapDebounceSec = param(session, "zap")?.toDoubleOrNull() ?: current.zapDebounceSec,
-            disableHighBitrate = param(session, "high_bitrate") != "1",
-            only4kHighBitrate = param(session, "only4k") == "1",
             allowLan = param(session, "allow_lan") == "1",
             logLevel = param(session, "log_level")?.toIntOrNull() ?: current.logLevel
         )
@@ -221,8 +212,6 @@ class LocalAdminServer(
             append("<div class=\"muted\">${esc(last.url ?: "")}</div>")
             append("</div>")
             append("<div class=\"card\" style=\"margin-top:12px\">")
-            append("<div class=\"row\"><span>高码率设备</span><span>${if (state.highBitrateReady) "已就绪" else "未就绪（1080p 模式）"}</span></div>")
-            append("<div class=\"row\"><span>设备会话</span><span>心跳 ${state.heartbeat} · GUID ${esc(state.guid.ifEmpty { "-" })}</span></div>")
             append("<div class=\"row\"><span>订阅地址</span><span>${esc(YspEngine.playlistUrl().ifEmpty { "-" })}</span></div>")
             append("<div class=\"row\"><span>控制台</span><span>${esc(LocalAdminServerManager.getAdminUrl())}</span></div>")
             if (state.error.isNotBlank()) {
@@ -238,65 +227,6 @@ class LocalAdminServer(
         return layout("状态", "status", body)
     }
 
-    private fun pageFlow(): String {
-        val body = """
-            <div class="pipe">
-              <div class="step" id="s_request"><div class="k">1 请求</div><div class="v">-</div><div class="muted">次/分</div></div>
-              <div class="step" id="s_select"><div class="k">2 选源</div><div class="v">-</div><div class="muted">事件</div></div>
-              <div class="step" id="s_upstream"><div class="k">3 上游取流</div><div class="v">-</div><div class="muted">事件</div></div>
-              <div class="step" id="s_rewrite"><div class="k">4 列表改写</div><div class="v">-</div><div class="muted">事件</div></div>
-              <div class="step" id="s_output"><div class="k">5 输出</div><div class="v">-</div><div class="muted">事件</div></div>
-              <div class="step" id="s_player"><div class="k">6 播放器</div><div class="v">-</div><div class="muted">事件</div></div>
-            </div>
-            <div class="grid" style="margin-top:12px">
-              <div class="card"><div class="k">当前频道</div><div class="v" id="flowChannel">-</div><div class="muted" id="flowSource">-</div></div>
-              <div class="card"><div class="k">线路分布</div><div class="v" id="flowModes">-</div><div class="muted">JCE / BK / 设备</div></div>
-            </div>
-            <div class="card" style="margin-top:12px">
-              <div class="k">事件流</div>
-              <div class="events" id="eventList"></div>
-            </div>
-            <script>
-              const stageIds = ['request','select','upstream','rewrite','output','player'];
-              async function tickFlow() {
-                try {
-                  const st = await (await fetch('/api/status', {cache:'no-store'})).json();
-                  const ev = await (await fetch('/api/events?after=0', {cache:'no-store'})).json();
-                  const now = Date.now();
-                  const counts = {};
-                  (ev.events || []).slice(-80).forEach(function(e) {
-                    if (now - e.at < 60000) counts[e.stage] = (counts[e.stage] || 0) + 1;
-                  });
-                  stageIds.forEach(function(id) {
-                    const el = document.getElementById('s_' + id);
-                    if (!el) return;
-                    el.querySelector('.v').textContent = counts[id] || 0;
-                    el.classList.toggle('hot', (counts[id] || 0) > 0);
-                  });
-                  const rows = [];
-                  (ev.events || []).slice(-18).reverse().forEach(function(e) {
-                    const t = new Date(e.at);
-                    const hh = String(t.getHours()).padStart(2,'0');
-                    const mm = String(t.getMinutes()).padStart(2,'0');
-                    const ss = String(t.getSeconds()).padStart(2,'0');
-                    rows.push('<div class="ev"><span class="ts">' + hh + ':' + mm + ':' + ss + '</span><span class="tag ' + e.stage + '">' + e.stage + '</span><span class="msg">' + escapeHtml(e.message) + '</span></div>');
-                  });
-                  document.getElementById('eventList').innerHTML = rows.join('') || '<div class="muted">暂无事件</div>';
-                  document.getElementById('flowChannel').textContent = st.currentChannel || '-';
-                  document.getElementById('flowSource').textContent = st.engineUrl || '-';
-                } catch (err) {}
-              }
-              function escapeHtml(s) {
-                return String(s == null ? '' : s).replace(/[&<>"]/g, function(c) {
-                  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
-                });
-              }
-              tickFlow(); setInterval(tickFlow, 1500);
-            </script>
-        """.trimIndent()
-        return layout("流程", "flow", body)
-    }
-
     private fun pageSettings(): String {
         val config = YspConfig.load(appContext)
         val gain = String.format(Locale.US, "%.2f", AudioGainPrefs.loadGain(appContext))
@@ -305,11 +235,6 @@ class LocalAdminServer(
             <form action="/config" method="post">
               <div class="card">
                 <div class="k">引擎设置（标 * 的项保存后会自动重启）</div>
-                <div class="row"><span>高码率 / 4K *</span><label class="switch"><input type="checkbox" name="high_bitrate" value="1" ${if (!config.disableHighBitrate) "checked" else ""}/><span></span></label></div>
-                <div class="row"><span>仅 4K / 8K 走高码率 *</span><label class="switch"><input type="checkbox" name="only4k" value="1" ${if (config.only4kHighBitrate) "checked" else ""}/><span></span></label></div>
-                <div class="row"><span>分片缓存（MB）*</span><input class="num" type="number" name="cache" min="16" max="128" value="${config.cacheMb}"/></div>
-                <div class="row"><span>单设备并发 *</span><input class="num" type="number" name="links" min="1" max="12" value="${config.linksPerDevice}"/></div>
-                <div class="row"><span>换台防抖（秒）*</span><input class="num" type="number" step="0.5" name="zap" min="0" max="30" value="${config.zapDebounceSec}"/></div>
                 <div class="row"><span>监听端口 *</span><input class="num" type="number" name="port" min="1024" max="65535" value="${config.port}"/></div>
                 <div class="row"><span>局域网共享 8767 *</span><label class="switch"><input type="checkbox" name="allow_lan" value="1" ${if (config.allowLan) "checked" else ""}/><span></span></label></div>
                 <div class="row"><span>日志级别</span>
@@ -451,7 +376,6 @@ class LocalAdminServer(
               </header>
               <nav class="tabs">
                 <a class="tab ${if (active == "status") "on" else ""}" href="/">状态</a>
-                <a class="tab ${if (active == "flow") "on" else ""}" href="/flow">流程</a>
                 <a class="tab ${if (active == "settings") "on" else ""}" href="/settings">设置</a>
                 <a class="tab ${if (active == "logs") "on" else ""}" href="/logs">日志</a>
               </nav>
